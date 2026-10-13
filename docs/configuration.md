@@ -337,8 +337,9 @@ Needed for force and moment coefficients, and for `fluid.reynolds_number`.
 | `directory` | path | `"results"` | Relative to the case file | |
 | `formats` | array | `["vtu"]` | Field output; `"vtu"` (series as PVD for unsteady runs) | D45 |
 | `interval` | int | `0` | Write every n iterations / time steps; 0 = only at the end | |
+| `verbosity` | `"normal"` \| `"detailed"` | `"normal"` | `"detailed"` also logs the inner iterations of unsteady runs | D45 |
 | `force_boundaries` | array of strings | all `"wall"` boundaries | Boundary faces over which forces and moments are integrated | |
-| `history` | bool | `true` | Residuals and coefficients per iteration, as CSV and in the `.log` file | D45 |
+| `history` | bool | `true` | Residuals and coefficients as CSV and in the `.log` file: per pseudo-time iteration (steady) or per physical time step (unsteady) | D45 |
 
 
 ## 6. Open questions
