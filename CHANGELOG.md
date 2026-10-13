@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.1 – Stage 1: operators and implicit machinery (not yet tagged)
+
+- Finite-volume geometry as JAX arrays (`aerojax.numerics.build_geometry`).
+- Weighted least-squares gradients on the vertex-neighbour stencil with
+  boundary-face values, weights 1/d^q (D22).
+- MUSCL reconstruction and the Venkatakrishnan–Wang limiter (D23).
+- Face gradients: α-damping with the damping term at the edge midpoint, and
+  the edge-correction fallback (D24).
+- Residual assembly from face fluxes; first-order Jacobian from AD of compact
+  face fluxes, assembled as a sparse block matrix (D25).
+- Direct sparse LU (D32) and implicit pseudo-time stepping with SER CFL
+  control and rejection safeguards (D35).
+- Model problem: steady scalar convection–diffusion with an exact exponential
+  solution (`aerojax.physics.convection_diffusion`, `aerojax.cases`).
+- Verification: observed order 1.9–2.1 on the two finest of four levels for
+  quadrilateral, triangle, polygon and mixed meshes (regular and perturbed);
+  convergence by 11 orders of magnitude in 17–29 iterations.
+- Example `examples/stage1_convection_diffusion.py`.
+
 ## 0.0 – Stage 0: foundations (2026-10-13)
 
 - Face-based mesh data structure for cell-centred finite volumes: arbitrary

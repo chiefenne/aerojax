@@ -4,8 +4,10 @@
 Python/JAX with SU2-based numerics, developed as a companion to
 [PyAero](https://github.com/chiefenne/PyAero).
 
-**Status:** stage 0 of the [stage plan](docs/requirements.md#7-stage-plan-d53),
-which covers the mesh foundations. aerojax does not solve flows yet.
+**Status:** stage 1 of the [stage plan](docs/requirements.md#7-stage-plan-d53):
+mesh foundations, finite-volume operators and the implicit solver machinery,
+verified on a scalar convection–diffusion model problem. aerojax does not solve
+flows yet.
 
 ## Documentation
 
@@ -27,12 +29,12 @@ pip install -e . --no-deps
 
 ```
 pytest                         # fast tests
-pytest -m slow                 # long benchmark cases (later stages)
+pytest -m slow                 # order-of-accuracy studies, benchmarks
 python examples/stage0_meshes.py
+python examples/stage1_convection_diffusion.py
 ```
 
-The example writes VTU files (for ParaView) and a mesh plot to
-`examples/output/`.
+The examples write VTU files (for ParaView) and plots to `examples/output/`.
 
 ## License
 

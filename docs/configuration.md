@@ -314,7 +314,7 @@ Needed for force and moment coefficients, and for `fluid.reynolds_number`.
 | `method` | `"implicit"` \| `"explicit-rk"` | `"implicit"` | `"explicit-rk"`: reference/debugging mode | D25 |
 | `max_iterations` | int | `10000` | Pseudo-time iterations (steady) | |
 | `residual_drop` | float | `8.0` | Convergence: orders of magnitude of residual reduction | |
-| `cfl` | table | `{ start = 10.0, max = 1.0e10, cut_factor = 0.1 }` | Pseudo-time CFL number, SER control with safeguards; values tentative | D35 |
+| `cfl` | table | `{ start = 10.0, max = 1.0e10, cut_factor = 0.1, reject_factor = 10.0 }` | Pseudo-time CFL number, SER control. An update is rejected (and the CFL multiplied by `cut_factor`) if the linear solve fails, the update is not finite, or the residual grows by more than `reject_factor`; values tentative | D35 |
 | `newton_krylov` | table | `{ enabled = true, switch_at_residual_drop = 2.0 }` | Switch from approximate-Jacobian iterations to Newton–Krylov | D25 |
 | `linear_solver` | table | `{ type = "direct" }` | `"direct"`: sparse LU (SciPy SuperLU), option `refactor_interval`. `"gmres-ilu"`: GMRES with ILU, options `tolerance`, `restart`, `ilu_drop_tolerance`, `ilu_fill_factor`. Default parameter values set from measurements in the first implicit stage | D32 |
 | `turbulence_coupling` | `"segregated"` \| `"coupled"` | `"segregated"` | `"segregated"`: mean flow and turbulence equations solved one after the other per iteration; `"coupled"`: one system for all variables | D34 |
