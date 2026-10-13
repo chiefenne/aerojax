@@ -8,7 +8,7 @@ Living document, updated after each requirement step.
 - **X** – not planned
 - **O** – open requirement step, with the current proposal
 
-Status: 2026-10-13, requirement steps 1–7, 8a–8c and the case configuration settled.
+Status: 2026-10-13, requirement steps 1–8 and the case configuration settled.
 
 
 ## 1. Purpose and scope
@@ -63,6 +63,9 @@ Status: 2026-10-13, requirement steps 1–7, 8a–8c and the case configuration 
 | D32 | 8b | Linear solver | Both behind one `linear_solver` setting: sparse direct LU (SciPy SuperLU), factorization reused over several iterations, as default; GMRES with ILU (SciPy) for large meshes. Default parameters and mesh-size threshold set from measurements on real Jacobians in the first implicit stage | Synthetic benchmark (2 cores): LU 0.6 s / 5.6 s / 16.7 s at 10k / 50k / 100k cells, ~1.2 GB at 100k. GMRES inside JAX with block-Jacobi: kept possible for P3 |
 | D33 | OC | Turbulence values (initial state, inflow boundaries) | `turbulence` table with exactly one of three forms: (b, primary) `turbulent_viscosity_ratio` ν_t/ν plus `intensity` Tu as a fraction; (a) `kinetic_energy` k [m²/s²] and `length_scale` ℓ [m] with the k-ε definition ε = C_μ^{3/4} k^{3/2}/ℓ, `c_mu` default 0.09; (c) `nu_tilde_ratio` (SA only). Default ν̃/ν = 3. Equivalent values reported; warning outside NASA TMR's ν̃/ν range 3–5 | SI wherever possible; dimensionless forms for literature cases |
 | D34 | 8c | Coupling of turbulence equations to the mean flow | Switch `solver.turbulence_coupling`: `"segregated"` (default; mean flow, then turbulence equations, each iteration) or `"coupled"` (one system for all variables; Newton–Krylov JVPs include all cross-couplings). Same residual code for both | No clear evidence for either (Suárez Martínez 2020, DLR); default revisited after the TMR flat plate and airfoil cases |
+| D35 | 8d | Pseudo-time CFL control | SER (switched evolution relaxation, Mulder & van Leer 1985): CFLₙ = CFLₙ₋₁·‖Rₙ₋₁‖/‖Rₙ‖, capped at CFL_max. Safeguards: on a strong residual increase, linear-solver failure or non-physical update, the update is rejected and the CFL is cut (×0.1) | Standard rule of pseudo-transient continuation (Kelley & Keyes 1998); PETSc TSPSEUDO default |
+| D36 | 8d | First-order start | Optional `numerics.first_order_iterations` (default 0): first n iterations at first order, then second order | Robustness aid for difficult start-ups |
+| D37 | 8d | Inner iterations (dual time stepping) | First time step BDF1, then BDF2. Inner loop uses the steady nonlinear solver (pseudo-time, Newton–Krylov, SER). Per-step convergence: inner residual drop (tentative 3 orders) or maximum inner iterations (tentative 50); verified with the Taylor–Green vortex. Fixed physical time step | Adaptive Δt: P6 |
 
 
 ## 3. Planned for later
@@ -85,6 +88,7 @@ Status: 2026-10-13, requirement steps 1–7, 8a–8c and the case configuration 
 | P3 | GPU execution on Linux/CUDA | Kept possible by D3; not tuned |
 | P4 | Transonic airfoil cases (e.g. RAE2822) | Depends on L1 |
 | P5 | JST central scheme as a second convective flux | Cross-check option for D21 |
+| P6 | Adaptive physical time step | For unsteady runs (D37) |
 
 
 ## 5. Not planned
@@ -101,7 +105,6 @@ Status: 2026-10-13, requirement steps 1–7, 8a–8c and the case configuration 
 
 | ID  | Topic | Current proposal |
 |-----|-------|------------------|
-| O8  | Solver (remaining) | 8d start-up strategy (CFL control) and inner iterations of dual time stepping |
 | O9  | Boundary-condition set | No-slip wall, symmetry/slip wall, velocity inlet, total-pressure inlet, static-pressure outlet, farfield, periodic, transpiration wall (D18). SA inflow value via the ν̃/ν ratio. Consistency checks at setup |
 | O10 | Test cases, reference data | Plane Couette and Poiseuille (exact; order of accuracy on all mesh types). Blasius flat plate. Lid-driven cavity Re 100/1000 (Ghia, Ghia & Shin 1982; optional). Cylinder: potential flow (inviscid), Schäfer–Turek 2D-1 (Re 20) and 2D-2 (Re 100, unsteady). 2D Taylor–Green vortex (time accuracy). Turbulent channel vs DNS (Moser, Kim & Mansour 1999; Lee & Moser 2015). NASA TMR zero-pressure-gradient flat plate (SA). Candidate validation: SD7003 at Re = 60,000 (laminar separation bubble). References still to be checked |
 | O11 | Meshes and I/O | In-code mesh generators (quadrilateral, triangle, polygon, mixed; several refinement levels; NumPy only). `.su2` reader. VTU output for ParaView. Plotting library (matplotlib proposed) |
@@ -123,6 +126,10 @@ Status: 2026-10-13, requirement steps 1–7, 8a–8c and the case configuration 
   Phys. Fluids 29, 127103 (2017) ([arXiv](https://arxiv.org/abs/1606.05556))
 - G. Suárez Martínez, *Coupling strategies for solving the RANS equations*,
   DLR-IB-AS-BS-2020-25 (2020) ([DLR elib](https://elib.dlr.de/134238))
+- W. A. Mulder, B. van Leer, *Experiments with implicit upwind methods for the
+  Euler equations*, J. Comput. Phys. 59, 232–246 (1985)
+- C. T. Kelley, D. E. Keyes, *Convergence analysis of pseudo-transient
+  continuation*, SIAM J. Numer. Anal. 35, 508–523 (1998)
 - O. Oxtoby et al., *A family of first-order accurate gradient schemes for
   finite volume methods* (2019) ([arXiv](https://arxiv.org/abs/1912.08064))
 - SU2 documentation: [Slope Limiters and Shock Resolution](https://su2code.github.io/docs_v7/Slope-Limiters-and-Shock-Resolution/)

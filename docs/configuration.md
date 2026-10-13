@@ -297,6 +297,7 @@ Needed for force and moment coefficients, and for `fluid.reynolds_number`.
 | `viscous_gradient` | `"alpha-damping"` \| `"edge-correction"` | `"alpha-damping"` | Face-gradient scheme | D24 |
 | `alpha` | float | `4/3` | α-damping coefficient | D24 |
 | `turbulence_spatial_order` | `1` \| `2` | `1` | SA convection (SU2 default: first order) | |
+| `first_order_iterations` | int | `0` | Iterations at first order before switching to `spatial_order` | D36 |
 
 ### `[solver]`
 
@@ -305,7 +306,7 @@ Needed for force and moment coefficients, and for `fluid.reynolds_number`.
 | `method` | `"implicit"` \| `"explicit-rk"` | `"implicit"` | `"explicit-rk"`: reference/debugging mode | D25 |
 | `max_iterations` | int | `10000` | Pseudo-time iterations (steady) | |
 | `residual_drop` | float | `8.0` | Convergence: orders of magnitude of residual reduction | |
-| `cfl` | table | `{ start = 10.0, max = 1.0e4, adaptive = true }` | Pseudo-time CFL number | O8d |
+| `cfl` | table | `{ start = 10.0, max = 1.0e10, cut_factor = 0.1 }` | Pseudo-time CFL number, SER control with safeguards; values tentative | D35 |
 | `newton_krylov` | table | `{ enabled = true, switch_at_residual_drop = 2.0 }` | Switch from approximate-Jacobian iterations to Newton–Krylov | D25 |
 | `linear_solver` | table | `{ type = "direct" }` | `"direct"`: sparse LU (SciPy SuperLU), option `refactor_interval`. `"gmres-ilu"`: GMRES with ILU, options `tolerance`, `restart`, `ilu_drop_tolerance`, `ilu_fill_factor`. Default parameter values set from measurements in the first implicit stage | D32 |
 | `turbulence_coupling` | `"segregated"` \| `"coupled"` | `"segregated"` | `"segregated"`: mean flow and turbulence equations solved one after the other per iteration; `"coupled"`: one system for all variables | D34 |
@@ -315,11 +316,11 @@ Needed for force and moment coefficients, and for `fluid.reynolds_number`.
 | Key | Type | Default | Description | # |
 |-----|------|---------|-------------|---|
 | `mode` | `"steady"` \| `"unsteady"` | `"steady"` | | D9 |
-| `scheme` | `"bdf2"` | `"bdf2"` | Dual time stepping | D9 |
+| `scheme` | `"bdf2"` | `"bdf2"` | Dual time stepping; the first time step uses BDF1 | D9, D37 |
 | `time_step` | float | req. if unsteady | Δt in s | D9 |
 | `end_time` | float | req. if unsteady | in s | D9 |
-| `inner_iterations` | int | `50` | Maximum pseudo-time iterations per time step | O8d |
-| `inner_residual_drop` | float | `3.0` | Inner convergence, orders of magnitude | O8d |
+| `inner_iterations` | int | `50` | Maximum pseudo-time iterations per time step (tentative) | D37 |
+| `inner_residual_drop` | float | `3.0` | Inner convergence, orders of magnitude (tentative) | D37 |
 
 ### `[output]`
 
