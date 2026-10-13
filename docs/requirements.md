@@ -8,7 +8,7 @@ Living document, updated after each requirement step.
 - **X** – not planned
 - **O** – open requirement step, with the current proposal
 
-Status: 2026-10-13, requirement steps 1–7 settled.
+Status: 2026-10-13, requirement steps 1–7 and 8a settled.
 
 
 ## 1. Purpose and scope
@@ -53,6 +53,8 @@ Status: 2026-10-13, requirement steps 1–7 settled.
 | D22 | 7b | Gradient reconstruction | Weighted least squares on the vertex-neighbour stencil (all cells sharing a node), inverse-distance weights 1/d^q with q as a parameter; boundary faces enter with their face values | Default q set by the verification cases. Plain Green–Gauss excluded: zero-order on general unstructured meshes (Syrakos et al. 2017) |
 | D23 | 7c | Slope limiter | Venkatakrishnan–Wang (threshold ε′ relative to the global min/max of each variable) as default; no limiter as an option; limiter freezing after N iterations or a residual drop | Barth–Jespersen excluded (compressive, poor convergence) |
 | D24 | 7d | Viscous face gradient | α-damping (Nishikawa 2010): average of cell gradients plus a damping term on the solution jump; α = 4/3 as a parameter; damping term evaluated at the edge midpoint between the cell centres (Nishikawa 2026). Fallback (switchable): average plus correction along the cell-to-cell direction | Pure averaging excluded (odd-even decoupling). The 2026 variant is an arXiv preprint |
+| D25 | 8a | Nonlinear solver | Implicit pseudo-time stepping with an approximate first-order Jacobian (from AD of the first-order face flux, assembled sparse) and adaptive CFL; then a switch to Newton–Krylov with exact Jacobian-vector products (`jax.jvp`), preconditioned by the first-order Jacobian. Explicit Runge–Kutta pseudo-time stepping kept as a reference and debugging mode | Same approach as SU2's `NEWTON_KRYLOV`, but exact JVPs instead of finite differences. Also used for the inner iterations of dual time stepping (D9) |
+| D26 | –  | Case configuration: naming | Names follow standard literature terminology and established acronyms (e.g. CFL, MUSCL, FDS, BDF2, GMRES, ILU, SA, RANS); SU2 option names are not copied | Readability is a primary requirement; the SU2 `.cfg` style is considered poor UX |
 
 
 ## 3. Planned for later
@@ -91,11 +93,12 @@ Status: 2026-10-13, requirement steps 1–7 settled.
 
 | ID  | Topic | Current proposal |
 |-----|-------|------------------|
-| O8  | Solver | Implicit pseudo-time Newton–Krylov. Jacobian-vector products via JAX `jvp`; first-order Jacobian as preconditioner; SciPy sparse linear solvers. Start-up strategy (CFL ramping). Coupling of SA to the mean flow: loose (as in SU2) or fully coupled |
+| O8  | Solver (remaining) | 8b linear solver (SciPy sparse). 8c coupling of SA to the mean flow: loose (as in SU2) or fully coupled. 8d start-up strategy (CFL ramping) and inner iterations of dual time stepping |
+| OC  | Case configuration | File format and structure (see D26) |
 | O9  | Boundary-condition set | No-slip wall, symmetry/slip wall, velocity inlet, total-pressure inlet, static-pressure outlet, farfield, periodic, transpiration wall (D18). SA inflow value via the ν̃/ν ratio. Consistency checks at setup |
 | O10 | Test cases, reference data | Plane Couette and Poiseuille (exact; order of accuracy on all mesh types). Blasius flat plate. Lid-driven cavity Re 100/1000 (Ghia, Ghia & Shin 1982; optional). Cylinder: potential flow (inviscid), Schäfer–Turek 2D-1 (Re 20) and 2D-2 (Re 100, unsteady). 2D Taylor–Green vortex (time accuracy). Turbulent channel vs DNS (Moser, Kim & Mansour 1999; Lee & Moser 2015). NASA TMR zero-pressure-gradient flat plate (SA). Candidate validation: SD7003 at Re = 60,000 (laminar separation bubble). References still to be checked |
 | O11 | Meshes and I/O | In-code mesh generators (quadrilateral, triangle, polygon, mixed; several refinement levels; NumPy only). `.su2` reader. VTU output for ParaView. Plotting library (matplotlib proposed) |
-| O12 | Software setup | conda (conda-forge); Python 3.13 with jax/jaxlib 0.10.2 (tentative: conda-forge has osx-64 builds for py311 and py313). `pyproject.toml`, src layout. pytest with fast/slow markers. ruff. NumPy-style docstrings. GitHub Actions on Linux and macOS arm64. Case input format (TOML or SU2-style `.cfg`). Units and non-dimensionalization. Typical mesh sizes and runtime targets. Stage-0 micro-benchmark JAX vs Numba |
+| O12 | Software setup | conda (conda-forge); Python 3.13 with jax/jaxlib 0.10.2 (tentative: conda-forge has osx-64 builds for py311 and py313). `pyproject.toml`, src layout. pytest with fast/slow markers. ruff. NumPy-style docstrings. GitHub Actions on Linux and macOS arm64. Units and non-dimensionalization. Typical mesh sizes and runtime targets. Stage-0 micro-benchmark JAX vs Numba |
 | O13 | Stage plan | Final ordering of implementation stages and their test criteria |
 
 
