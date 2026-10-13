@@ -8,7 +8,7 @@ Living document, updated after each requirement step.
 - **X** – not planned
 - **O** – open requirement step, with the current proposal
 
-Status: 2026-10-13, requirement steps 1–10 and the case configuration settled.
+Status: 2026-10-13, requirement steps 1–10, 11a and the case configuration settled.
 
 
 ## 1. Purpose and scope
@@ -70,6 +70,9 @@ Status: 2026-10-13, requirement steps 1–10 and the case configuration settled.
 | D39 | 9b | Boundary-condition consistency rules | R1 assignment: every set of boundary faces gets exactly one condition; unknown names are errors ("did you mean …?"); a periodic pair is declared once. Face-level mesh check: every boundary face (face with one adjacent cell) belongs to exactly one set (no unassigned faces, no face in several sets), and sets contain boundary faces only; errors list the offending faces with count and coordinates. R2 pressure level: without a `pressure-outlet`, `farfield` or `total-pressure-inlet`, the pressure in one reference cell is fixed to `initial.pressure` (cell nearest `reference.pressure_point`, default the domain centroid), with a notice. R3 mass balance: without a pressure boundary, the prescribed net inflow must be zero. R4 periodic channels: driving force `physics.mean_pressure_gradient` (Pa/m); periodic faces matched by translation with a tolerance relative to the local face size. R5 Euler mode: `wall` treated as `slip-wall`, with a notice. R6 turbulence values: unused by the model → notice; on non-inflow types → error | Bulk-velocity control for periodic channels: P9 |
 | D40 | 10 | Test cases | Verification: V1 plane Couette (linear solution reproduced to round-off on every mesh type); V2 plane Poiseuille, periodic (order of accuracy on quad/triangle/polygon/mixed meshes, 4 levels); V3 2D Taylor–Green vortex (time order, spatial order incl. convective terms, pressure fixing); V4 inviscid cylinder (Euler, Cp = 1 − 4 sin²θ). Benchmarks: B1 Blasius flat plate (similarity solution computed in the repo); B2 DFG cylinder in channel 2D-1 (Re 20) and 2D-2 (Re 100, unsteady) (Schäfer & Turek 1996; 2D-1 reference values C_D = 5.57953523384, C_L = 0.010618948146, Δp = 0.11752016697, Nabh 1998); B3 lid-driven cavity Re 100/1000 (Ghia, Ghia & Shin 1982). RANS: R1 NASA TMR zero-pressure-gradient flat plate (SA; TMR is M = 0.2 compressible, incompressible results expected close but not identical); R2 NACA 0012, TMR 2DN00 (SA, Re 6·10⁶, α = 0/10/15°; Ladson, Gregory & O'Reilly). Later with L3: SD7003, Re 60,000 | Acceptance criteria (tentative): observed order 1.8–2.2 on the two finest levels; benchmark deviations stated per case; final tolerances in the stage plan |
 | D41 | 10 | Python API | A proper, documented Python API is a first-class interface alongside the TOML case file. In the API, boundary values may be functions u(x, y, t) (used e.g. for the parabolic DFG inflow); the TOML file supports constants until P7 | |
+| D42 | 11a | Mesh generators | In code, NumPy only: rectangle/channel/periodic box as quad, triangle (split quads), polygon (dual of a triangle mesh) and mixed meshes; cylinder O-grid and multi-block DFG channel (transfinite interpolation), triangle variants by splitting. Wall-normal stretching, optional random node perturbation, 4 refinement levels (halving) | |
+| D43 | 11a | Mesh file readers | `.su2` (PyAero, SU2) and 2D PLOT3D (NASA TMR grids), both native, no converter scripts. PLOT3D has no boundary names: they are defined in `[mesh.boundary_faces]` by grid edge, optionally split by a coordinate range (proposal, see configuration.md). Coincident nodes on block edges (e.g. C-grid wake cut) are merged so the cut becomes interior | Gmsh reader: L6 |
+| D44 | 11a | Mesh storage | Generated meshes are not committed (regenerated deterministically). TMR grids are not committed: a download script with checksums. PyAero meshes for R2: decided at R2 | |
 
 
 ## 3. Planned for later
@@ -81,6 +84,7 @@ Status: 2026-10-13, requirement steps 1–10 and the case configuration settled.
 | L3 | Transition transport model | Candidates: SA-AFT (e^N / N_crit based, 2 extra equations), SA-BCM (algebraic, available in SU2), Langtry–Menter (requires SST). Choice made at that stage, after validation |
 | L4 | PyAero integration | Read PyAero-exported `.su2` meshes with boundary markers; airfoil cases; later coupling with PyAero |
 | L5 | Further turbulence models | Through D13, e.g. Wilcox k-ω |
+| L6 | Gmsh mesh reader | `.msh`, physical groups as boundary-face names |
 
 
 ## 4. Possible later (not decided)
@@ -115,7 +119,7 @@ Status: 2026-10-13, requirement steps 1–10 and the case configuration settled.
 
 | ID  | Topic | Current proposal |
 |-----|-------|------------------|
-| O11 | Meshes and I/O | In-code mesh generators (quadrilateral, triangle, polygon, mixed; several refinement levels; NumPy only). `.su2` reader. VTU output for ParaView. Plotting library (matplotlib proposed) |
+| O11 | Meshes and I/O (remaining) | 11b output formats (VTU for ParaView proposed); 11c plotting library (matplotlib proposed) |
 | O12 | Software setup | conda (conda-forge); Python 3.13 with jax/jaxlib 0.10.2 (tentative: conda-forge has osx-64 builds for py311 and py313). `pyproject.toml`, src layout. pytest with fast/slow markers. ruff. NumPy-style docstrings. GitHub Actions on Linux and macOS arm64. Units and non-dimensionalization. Typical mesh sizes and runtime targets. Stage-0 micro-benchmark JAX vs Numba |
 | O13 | Stage plan | Final ordering of implementation stages and their test criteria |
 

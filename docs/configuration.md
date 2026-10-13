@@ -175,11 +175,35 @@ entry to a decision (D) or an open step (O) in `requirements.md`.
 
 | Key | Type | Default | Description | # |
 |-----|------|---------|-------------|---|
-| `file` | path | req. | Mesh file (`.su2`); path relative to the case file | O11 |
+| `file` | path | req. | Mesh file, path relative to the case file. Format from the extension: `.su2`; PLOT3D 2D (`.p2dfmt`, `.x`) | D43 |
 | `scale` | float | `1.0` | Factor applied to all coordinates (e.g. `0.001` for mm → m) | |
 
 Test-case meshes generated in code are passed through the Python API, not the
-case file (O11).
+case file (D42).
+
+`[mesh.boundary_faces]`, PLOT3D only (proposal, D43). PLOT3D files carry no
+boundary names, so they are defined here, one entry per name:
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `edge` | `"i_min"` \| `"i_max"` \| `"j_min"` \| `"j_max"` | req. | Grid edge of the (single) block |
+| `x_min`, `x_max`, `y_min`, `y_max` | float | – | Optional coordinate range (m) to split an edge; a face belongs to the set if its centre lies inside |
+
+Coordinate ranges instead of index ranges keep one definition valid for every
+level of a grid family. Coincident nodes on block edges (e.g. the wake cut of a
+C-grid) are merged, so the cut becomes interior and needs no entry.
+
+```toml
+[mesh]
+file = "flatplate_clust2_2levelsdown_137x97.p2dfmt"   # NASA TMR grid, PLOT3D 2D
+
+[mesh.boundary_faces]                    # PLOT3D files carry no boundary names
+symmetry = { edge = "j_min", x_max = 0.0 }    # upstream of the plate
+plate    = { edge = "j_min", x_min = 0.0 }
+inlet    = { edge = "i_min" }
+outlet   = { edge = "i_max" }
+top      = { edge = "j_max" }
+```
 
 ### `[physics]`
 
