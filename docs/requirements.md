@@ -8,7 +8,7 @@ Living document, updated after each requirement step.
 - **X** – not planned
 - **O** – open requirement step, with the current proposal
 
-Status: 2026-10-13, requirement steps 1–6, 7a and 7b settled.
+Status: 2026-10-13, requirement steps 1–6 and 7a–7c settled.
 
 
 ## 1. Purpose and scope
@@ -51,6 +51,7 @@ Status: 2026-10-13, requirement steps 1–6, 7a and 7b settled.
 | D20 | –  | Plots | Plots of all test results compared with reference data | Library: O11 |
 | D21 | 7a | Convective flux | FDS (flux-difference splitting) with low-speed preconditioning, as in SU2 INC. First order without reconstruction (start-up); second order with MUSCL reconstruction and limiter | No tuning parameters. JST: P5 |
 | D22 | 7b | Gradient reconstruction | Weighted least squares on the vertex-neighbour stencil (all cells sharing a node), inverse-distance weights 1/d^q with q as a parameter; boundary faces enter with their face values | Default q set by the verification cases. Plain Green–Gauss excluded: zero-order on general unstructured meshes (Syrakos et al. 2017) |
+| D23 | 7c | Slope limiter | Venkatakrishnan–Wang (threshold ε′ relative to the global min/max of each variable) as default; no limiter as an option; limiter freezing after N iterations or a residual drop | Barth–Jespersen excluded (compressive, poor convergence) |
 
 
 ## 3. Planned for later
@@ -89,7 +90,7 @@ Status: 2026-10-13, requirement steps 1–6, 7a and 7b settled.
 
 | ID  | Topic | Current proposal |
 |-----|-------|------------------|
-| O7  | Spatial numerics (remaining) | 7c limiter: Venkatakrishnan. 7d viscous face gradient: averaged cell gradients with a correction along the cell-to-cell direction |
+| O7  | Spatial numerics (remaining) | 7d viscous face gradient: averaged cell gradients with a correction along the cell-to-cell direction |
 | O8  | Solver | Implicit pseudo-time Newton–Krylov. Jacobian-vector products via JAX `jvp`; first-order Jacobian as preconditioner; SciPy sparse linear solvers. Start-up strategy (CFL ramping). Coupling of SA to the mean flow: loose (as in SU2) or fully coupled |
 | O9  | Boundary-condition set | No-slip wall, symmetry/slip wall, velocity inlet, total-pressure inlet, static-pressure outlet, farfield, periodic, transpiration wall (D18). SA inflow value via the ν̃/ν ratio. Consistency checks at setup |
 | O10 | Test cases, reference data | Plane Couette and Poiseuille (exact; order of accuracy on all mesh types). Blasius flat plate. Lid-driven cavity Re 100/1000 (Ghia, Ghia & Shin 1982; optional). Cylinder: potential flow (inviscid), Schäfer–Turek 2D-1 (Re 20) and 2D-2 (Re 100, unsteady). 2D Taylor–Green vortex (time accuracy). Turbulent channel vs DNS (Moser, Kim & Mansour 1999; Lee & Moser 2015). NASA TMR zero-pressure-gradient flat plate (SA). Candidate validation: SD7003 at Re = 60,000 (laminar separation bubble). References still to be checked |
