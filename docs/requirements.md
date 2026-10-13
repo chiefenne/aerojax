@@ -8,7 +8,7 @@ Living document, updated after each requirement step.
 - **X** – not planned
 - **O** – open requirement step, with the current proposal
 
-Status: 2026-10-13, requirement steps 1–11 and the case configuration settled.
+Status: 2026-10-13, requirement steps 1–11, most of 12a and the case configuration settled.
 
 
 ## 1. Purpose and scope
@@ -21,7 +21,7 @@ Status: 2026-10-13, requirement steps 1–11 and the case configuration settled.
 - Verified against analytic solutions and published numerical and experimental
   reference data for a small set of test cases (D40).
 - Software engineering lean but solid: package structure, tests including
-  reference solutions, CI.
+  reference solutions, run locally (no CI, X5).
 - Step-by-step development; every stage ends with results that can be tested.
 
 
@@ -76,6 +76,8 @@ Status: 2026-10-13, requirement steps 1–11 and the case configuration settled.
 | D45 | 11b | Output formats | Flow fields: VTU (VTK XML, own NumPy writer, values per cell, optionally node-interpolated); unsteady series: PVD. Wall distributions: CSV per wall boundary (x, y, Cp, Cf, y⁺, …). Convergence history: CSV and a human-readable `.log` file (fixed-width columns, readable with `tail -f`/`more`; header with resolved settings, mesh statistics, equivalent turbulence values, notices and warnings; final summary). Layout depends on the time mode: steady, one line per pseudo-time iteration; unsteady, one line per physical time step (step, time, inner iterations used, inner residual drop reached, residuals, coefficients), inner iterations only at higher verbosity. The CSV histories follow the same split. Restart: NumPy `.npz` with solution, mesh fingerprint and resolved configuration | No meshio (limit dependencies) |
 | D46 | 11c | Plotting | matplotlib, optional: never imported by the solver core; used by test and example scripts for comparison, convergence and simple field plots; skipped if not installed. Detailed field visualization in ParaView (VTU) | |
 | D47 | 11c | Dependency policy | Core: numpy, scipy, jax/jaxlib (TOML via the standard library). Optional: matplotlib (plots only). Development: pytest, ruff. Any further dependency requires an explicit decision | |
+| D48 | 12a | Environment and packaging | `environment.yml` (conda-forge) with exactly pinned, tested versions: Python 3.13, jax/jaxlib 0.10.2, numpy, scipy, matplotlib, pytest, ruff. `pyproject.toml` (PEP 621, setuptools backend) with compatible version ranges (e.g. `jax>=0.10.2,<0.11`), extras `[plot]` and `[dev]`. Install: `conda env create -f environment.yml`, then `pip install -e . --no-deps`. CLI `aerojax run case.toml` and `aerojax check case.toml` (validate, print resolved configuration). float64 enabled on import (`jax_enable_x64`, documented). Versioning 0.x with Git tags and `CHANGELOG.md` | conda-forge needed on Intel macOS (no PyPI jaxlib) |
+| D49 | 12a | Testing | pytest, run locally on the iMac, the M4 and Linux. Fast tests by default; benchmark cases marked `slow`. Reference data as CSV with a source citation in the header | No CI (X5) |
 
 
 ## 3. Planned for later
@@ -116,13 +118,14 @@ Status: 2026-10-13, requirement steps 1–11 and the case configuration settled.
 | X2 | Wall functions | Conflicts with wall-resolved PyAero meshes and laminar/transitional flow (D14) |
 | X3 | Apple Metal backend | No float64 support |
 | X4 | Pressure-based segregated solver (SIMPLE/PISO) | Replaced by D8 |
+| X5 | Continuous integration on GitHub | Decided in step 12a; tests run locally |
 
 
 ## 6. Open requirement steps
 
 | ID  | Topic | Current proposal |
 |-----|-------|------------------|
-| O12 | Software setup | conda (conda-forge); Python 3.13 with jax/jaxlib 0.10.2 (tentative: conda-forge has osx-64 builds for py311 and py313). `pyproject.toml`, src layout. pytest with fast/slow markers. ruff. NumPy-style docstrings. GitHub Actions on Linux and macOS arm64. Units and non-dimensionalization. Typical mesh sizes and runtime targets. Stage-0 micro-benchmark JAX vs Numba |
+| O12 | Software setup (remaining) | 12a package layout (src/ structure, to be clarified). 12c units and non-dimensionalization; typical mesh sizes and runtime targets; Stage-0 micro-benchmark JAX vs Numba (Numba conflicts with D47) |
 | O13 | Stage plan | Final ordering of implementation stages and their test criteria |
 
 
