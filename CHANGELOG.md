@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.0 – Stage 0: foundations (not yet tagged)
+## 0.0 – Stage 0: foundations (2026-10-13)
 
 - Face-based mesh data structure for cell-centred finite volumes: arbitrary
   polygon cells, faces with owner and neighbour cells, outward unit normals,
