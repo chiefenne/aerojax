@@ -8,7 +8,7 @@ Living document, updated after each requirement step.
 - **X** – not planned
 - **O** – open requirement step, with the current proposal
 
-Status: 2026-10-13, requirement steps 1–12 and the case configuration settled; stage plan (step 13) proposed.
+Status: 2026-10-13, requirements complete (steps 1–13). Implementation follows the stage plan (section 7).
 
 
 ## 1. Purpose and scope
@@ -81,6 +81,7 @@ Status: 2026-10-13, requirement steps 1–12 and the case configuration settled;
 | D50 | 12a | Package layout | All source under `src/aerojax/` in subfolders (`config`, `mesh`, `physics`, `numerics`, `solver`, `io`, `plotting`, `cli.py`); `tests/`, `examples/`, `docs/` at the top level (not installed) | |
 | D51 | 12c | Non-dimensionalization | Internally non-dimensional with ρ_ref, U_ref, L_ref (p_ref = ρU², μ_ref = ρUL, t_ref = L/U); input and output in SI | Keeps variables O(1) and the Jacobian well conditioned |
 | D52 | 12c | Mesh size and performance | Typical meshes 50k–500k cells. No runtime target and no benchmark; the solver should be as fast as possible | Measured LU cost (step 8b) extrapolates to ~8 GB at 500k cells with 3 unknowns per cell (~15 GB with SA coupled): GMRES-ILU must be robust for large meshes; stronger preconditioner: P13 |
+| D53 | 13 | Stage plan | Confirmed as in section 7 | |
 
 
 ## 3. Planned for later
@@ -128,12 +129,10 @@ Status: 2026-10-13, requirement steps 1–12 and the case configuration settled;
 
 ## 6. Open requirement steps
 
-| ID  | Topic | Current proposal |
-|-----|-------|------------------|
-| O13 | Stage plan | Proposal in section 7, to be confirmed |
+None. New requirements arising during implementation are added here first.
 
 
-## 7. Stage plan (proposal, O13)
+## 7. Stage plan (D53)
 
 Every stage ends with:
 
