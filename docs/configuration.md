@@ -144,7 +144,9 @@ type = "farfield"                # imposes the freestream state
 velocity = 14.6                  # m/s, magnitude
 angle_of_attack = 4.0            # deg
 pressure = 0.0                   # Pa, gauge
-# turbulence values: open (O9)
+turbulence = { turbulent_viscosity_ratio = 0.21 }   # nu_t/nu; for SA equal
+                                 # to nu_tilde/nu = 3 (NASA TMR). Same as the
+                                 # default, shown here for illustration.
 
 [reference]
 length = 1.0                     # m, chord; velocity, density and flow
@@ -208,7 +210,7 @@ Either explicit values or `from_boundary`, not both.
 |-----|------|---------|-------------|---|
 | `velocity` | [float, float] | – | (u, v) in m/s | D16 |
 | `pressure` | float | – | Gauge pressure in Pa | D16 |
-| turbulence | – | – | *open: O9* (same form as at boundaries) | D16, O9 |
+| `turbulence` | table | ν̃/ν = 3 | See [Turbulence values](#turbulence-values) | D16, D33 |
 | `from_boundary` | string | name of the farfield boundary, if exactly one exists | Uniform field equal to the state of this boundary | D28 |
 | `restart` | path | – | Start from a previous solution (later) | |
 
@@ -223,20 +225,51 @@ One table per set of boundary faces. `<name>` is the name in the mesh file.
 |-----|------|---------|-------------|---|
 | `type` | string | req. | Boundary condition type, see below | O9 |
 
-Proposed types and parameters (*open: O9*; turbulence values for all inflow
-types also open):
+Proposed types and parameters (*open: O9*). Types marked "inflow" take a
+`turbulence` table ([Turbulence values](#turbulence-values)):
 
 | `type` | Parameters (proposal) |
 |--------|-----------------------|
 | `"wall"` | No-slip wall. Optional `velocity = [u, v]` for a moving wall (e.g. cavity lid) |
 | `"slip-wall"` | Inviscid wall, zero normal velocity |
 | `"symmetry"` | Symmetry plane |
-| `"farfield"` | `velocity` (magnitude, m/s), `angle_of_attack` (deg, default 0), `pressure` (Pa, default 0) |
-| `"velocity-inlet"` | `velocity = [u, v]` in m/s |
-| `"total-pressure-inlet"` | `total_pressure` (Pa), `flow_direction` |
+| `"farfield"` | `velocity` (magnitude, m/s), `angle_of_attack` (deg, default 0), `pressure` (Pa, default 0); inflow: `turbulence` |
+| `"velocity-inlet"` | `velocity = [u, v]` in m/s; inflow: `turbulence` |
+| `"total-pressure-inlet"` | `total_pressure` (Pa), `flow_direction`; inflow: `turbulence` |
 | `"pressure-outlet"` | `pressure` (Pa, default 0) |
 | `"periodic"` | `partner` (name of the matching boundary faces), `translation = [dx, dy]` (m) |
-| `"transpiration-wall"` | `normal_velocity` (m/s; + blowing, − suction), optional time dependence (D18) |
+| `"transpiration-wall"` | `normal_velocity` (m/s; + blowing, − suction), optional time dependence (D18); inflow (blowing): `turbulence` |
+
+### Turbulence values
+
+Used in `[initial]` and at inflow boundaries (D33). The SA working variable ν̃
+is needed wherever flow enters the domain and in the initial field. Walls
+(ν̃ = 0), outflow and symmetry need no input.
+
+Exactly one of three input forms:
+
+| Form | Keys | Units | Purpose |
+|------|------|-------|---------|
+| **b (primary)** | `turbulent_viscosity_ratio`, `intensity` | –, – | ν_t/ν (turbulent over molecular viscosity) and Tu as a fraction (0.001 = 0.1 %). `intensity` is required only by models that need k or Tu (SST, transition models); SA reports it as unused |
+| a | `kinetic_energy`, `length_scale`, optional `c_mu` | m²/s², m, – | k and the k-ε length scale ℓ (size of the energy-carrying eddies). `c_mu` defaults to 0.09 |
+| c | `nu_tilde_ratio` | – | SA only: ν̃/ν, the notation of NASA TMR |
+
+Default, if no `turbulence` table is given: ν̃/ν = 3 (NASA TMR, SU2 default).
+The resolved configuration writes it in form b as
+`turbulent_viscosity_ratio = 0.2104`.
+
+Conversions (ν = μ/ρ, U = local inflow velocity magnitude):
+
+- Form a → ν_t: ε = C_μ^{3/4} k^{3/2} / ℓ, so ν_t = C_μ k²/ε = C_μ^{1/4} √k ℓ
+- Form b → k (when needed): k = 1.5 (Tu U)²; for SST, ω = k/ν_t
+- ν_t → SA's ν̃: solve ν_t/ν = χ f_v1(χ) for χ = ν̃/ν, with
+  f_v1 = χ³/(χ³ + c_v1³) and c_v1 = 7.1. The left side is monotonic in χ, so
+  the solution is unique.
+
+Reported for every inflow and for the initial state, in the log and in the
+resolved configuration: the equivalent ν_t/ν, ν̃/ν and, where defined, k, ℓ
+and Tu. A warning is issued when ν̃/ν lies outside the NASA TMR range of 3–5
+for SA.
 
 ### `[reference]`
 
@@ -301,4 +334,5 @@ Needed for force and moment coefficients, and for `fluid.reynolds_number`.
 
 ## 6. Open questions
 
-1. Turbulence values at inflow boundaries and in the initial state (O9).
+None in the configuration itself. The boundary-condition types and their
+parameters follow from requirement step 9 (O9).

@@ -8,7 +8,7 @@ Living document, updated after each requirement step.
 - **X** – not planned
 - **O** – open requirement step, with the current proposal
 
-Status: 2026-10-13, requirement steps 1–7, 8a, 8b and the configuration format and structure settled.
+Status: 2026-10-13, requirement steps 1–7, 8a, 8b and the case configuration settled.
 
 
 ## 1. Purpose and scope
@@ -61,6 +61,7 @@ Status: 2026-10-13, requirement steps 1–7, 8a, 8b and the configuration format
 | D30 | OC | Example case files | Every test case ships with a commented example case file; the resolved configuration is written with comments (description, unit, explicit or default) | Helps avoid misconfiguration |
 | D31 | OC | Reynolds-number input | `fluid.reynolds_number` as an alternative to `fluid.viscosity`; μ derived from the reference velocity and length | |
 | D32 | 8b | Linear solver | Both behind one `linear_solver` setting: sparse direct LU (SciPy SuperLU), factorization reused over several iterations, as default; GMRES with ILU (SciPy) for large meshes. Default parameters and mesh-size threshold set from measurements on real Jacobians in the first implicit stage | Synthetic benchmark (2 cores): LU 0.6 s / 5.6 s / 16.7 s at 10k / 50k / 100k cells, ~1.2 GB at 100k. GMRES inside JAX with block-Jacobi: kept possible for P3 |
+| D33 | OC | Turbulence values (initial state, inflow boundaries) | `turbulence` table with exactly one of three forms: (b, primary) `turbulent_viscosity_ratio` ν_t/ν plus `intensity` Tu as a fraction; (a) `kinetic_energy` k [m²/s²] and `length_scale` ℓ [m] with the k-ε definition ε = C_μ^{3/4} k^{3/2}/ℓ, `c_mu` default 0.09; (c) `nu_tilde_ratio` (SA only). Default ν̃/ν = 3. Equivalent values reported; warning outside NASA TMR's ν̃/ν range 3–5 | SI wherever possible; dimensionless forms for literature cases |
 
 
 ## 3. Planned for later
@@ -100,7 +101,6 @@ Status: 2026-10-13, requirement steps 1–7, 8a, 8b and the configuration format
 | ID  | Topic | Current proposal |
 |-----|-------|------------------|
 | O8  | Solver (remaining) | 8c coupling of SA to the mean flow: loose (as in SU2) or fully coupled. 8d start-up strategy (CFL ramping) and inner iterations of dual time stepping |
-| OC  | Case configuration (remaining) | Turbulence values at inflow boundaries and in the initial state (with O9) |
 | O9  | Boundary-condition set | No-slip wall, symmetry/slip wall, velocity inlet, total-pressure inlet, static-pressure outlet, farfield, periodic, transpiration wall (D18). SA inflow value via the ν̃/ν ratio. Consistency checks at setup |
 | O10 | Test cases, reference data | Plane Couette and Poiseuille (exact; order of accuracy on all mesh types). Blasius flat plate. Lid-driven cavity Re 100/1000 (Ghia, Ghia & Shin 1982; optional). Cylinder: potential flow (inviscid), Schäfer–Turek 2D-1 (Re 20) and 2D-2 (Re 100, unsteady). 2D Taylor–Green vortex (time accuracy). Turbulent channel vs DNS (Moser, Kim & Mansour 1999; Lee & Moser 2015). NASA TMR zero-pressure-gradient flat plate (SA). Candidate validation: SD7003 at Re = 60,000 (laminar separation bubble). References still to be checked |
 | O11 | Meshes and I/O | In-code mesh generators (quadrilateral, triangle, polygon, mixed; several refinement levels; NumPy only). `.su2` reader. VTU output for ParaView. Plotting library (matplotlib proposed) |
