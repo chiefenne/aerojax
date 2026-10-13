@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+
+# Tools
+.pytest_cache/
+.ruff_cache/
+
+# Generated output (meshes, results, plots)
+results/
+examples/output/

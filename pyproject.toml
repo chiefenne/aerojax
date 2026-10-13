@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aerojax"
+version = "0.0"
+description = "2D unstructured cell-centred finite-volume Navier-Stokes/RANS solver in Python/JAX with SU2-based numerics (companion to PyAero)"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Andreas Ennemoser" }]
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=2.0",
+    "scipy>=1.13",
+    "jax>=0.10.2,<0.11",
+    "jaxlib>=0.10.2,<0.11",
+]
+
+[project.optional-dependencies]
+plot = ["matplotlib>=3.8"]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[project.urls]
+Repository = "https://github.com/chiefenne/aerojax"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["slow: long-running benchmark cases (run with: pytest -m slow)"]
+addopts = "-m 'not slow'"
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "NPY", "D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D"]
