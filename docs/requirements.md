@@ -8,7 +8,7 @@ Living document, updated after each requirement step.
 - **X** – not planned
 - **O** – open requirement step, with the current proposal
 
-Status: 2026-10-13, requirement steps 1–6 and 7a–7c settled.
+Status: 2026-10-13, requirement steps 1–7 settled.
 
 
 ## 1. Purpose and scope
@@ -52,6 +52,7 @@ Status: 2026-10-13, requirement steps 1–6 and 7a–7c settled.
 | D21 | 7a | Convective flux | FDS (flux-difference splitting) with low-speed preconditioning, as in SU2 INC. First order without reconstruction (start-up); second order with MUSCL reconstruction and limiter | No tuning parameters. JST: P5 |
 | D22 | 7b | Gradient reconstruction | Weighted least squares on the vertex-neighbour stencil (all cells sharing a node), inverse-distance weights 1/d^q with q as a parameter; boundary faces enter with their face values | Default q set by the verification cases. Plain Green–Gauss excluded: zero-order on general unstructured meshes (Syrakos et al. 2017) |
 | D23 | 7c | Slope limiter | Venkatakrishnan–Wang (threshold ε′ relative to the global min/max of each variable) as default; no limiter as an option; limiter freezing after N iterations or a residual drop | Barth–Jespersen excluded (compressive, poor convergence) |
+| D24 | 7d | Viscous face gradient | α-damping (Nishikawa 2010): average of cell gradients plus a damping term on the solution jump; α = 4/3 as a parameter; damping term evaluated at the edge midpoint between the cell centres (Nishikawa 2026). Fallback (switchable): average plus correction along the cell-to-cell direction | Pure averaging excluded (odd-even decoupling). The 2026 variant is an arXiv preprint |
 
 
 ## 3. Planned for later
@@ -90,7 +91,6 @@ Status: 2026-10-13, requirement steps 1–6 and 7a–7c settled.
 
 | ID  | Topic | Current proposal |
 |-----|-------|------------------|
-| O7  | Spatial numerics (remaining) | 7d viscous face gradient: averaged cell gradients with a correction along the cell-to-cell direction |
 | O8  | Solver | Implicit pseudo-time Newton–Krylov. Jacobian-vector products via JAX `jvp`; first-order Jacobian as preconditioner; SciPy sparse linear solvers. Start-up strategy (CFL ramping). Coupling of SA to the mean flow: loose (as in SU2) or fully coupled |
 | O9  | Boundary-condition set | No-slip wall, symmetry/slip wall, velocity inlet, total-pressure inlet, static-pressure outlet, farfield, periodic, transpiration wall (D18). SA inflow value via the ν̃/ν ratio. Consistency checks at setup |
 | O10 | Test cases, reference data | Plane Couette and Poiseuille (exact; order of accuracy on all mesh types). Blasius flat plate. Lid-driven cavity Re 100/1000 (Ghia, Ghia & Shin 1982; optional). Cylinder: potential flow (inviscid), Schäfer–Turek 2D-1 (Re 20) and 2D-2 (Re 100, unsteady). 2D Taylor–Green vortex (time accuracy). Turbulent channel vs DNS (Moser, Kim & Mansour 1999; Lee & Moser 2015). NASA TMR zero-pressure-gradient flat plate (SA). Candidate validation: SD7003 at Re = 60,000 (laminar separation bubble). References still to be checked |
@@ -108,4 +108,17 @@ Status: 2026-10-13, requirement steps 1–6 and 7a–7c settled.
 - B. Diskin et al., *Comparison of node-centered and cell-centered unstructured
   finite-volume discretizations: viscous fluxes*, AIAA 2009-597
   ([NTRS](https://ntrs.nasa.gov/citations/20090007604))
+- A. Syrakos et al., *A critical analysis of some popular methods for the
+  discretisation of the gradient operator in finite volume methods*,
+  Phys. Fluids 29, 127103 (2017) ([arXiv](https://arxiv.org/abs/1606.05556))
+- O. Oxtoby et al., *A family of first-order accurate gradient schemes for
+  finite volume methods* (2019) ([arXiv](https://arxiv.org/abs/1912.08064))
+- SU2 documentation: [Slope Limiters and Shock Resolution](https://su2code.github.io/docs_v7/Slope-Limiters-and-Shock-Resolution/)
+- H. Nishikawa, *Beyond interface gradient: a general principle for
+  constructing diffusion schemes*, AIAA 2010-5093
+- H. Nishikawa, B. Diskin, *Arithmetic averages of viscous coefficients are
+  sufficient for second-order finite-volume viscous discretization on
+  unstructured grids* (2022) ([arXiv](https://arxiv.org/abs/2203.08334))
+- H. Nishikawa, *On robust alpha-damping viscous scheme* (2026)
+  ([arXiv](https://arxiv.org/abs/2608.17664))
 - conda-forge jaxlib builds: https://anaconda.org/conda-forge/jaxlib/files
