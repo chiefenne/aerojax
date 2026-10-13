@@ -19,7 +19,7 @@ Status: 2026-10-13, requirement steps 1–10 and the case configuration settled.
 - Numerics based on [SU2](https://github.com/su2code/SU2), unless newer,
   demonstrably better algorithms exist.
 - Verified against analytic solutions and published numerical and experimental
-  reference data for a small set of test cases (O10).
+  reference data for a small set of test cases (D40).
 - Software engineering lean but solid: package structure, tests including
   reference solutions, CI.
 - Step-by-step development; every stage ends with results that can be tested.
