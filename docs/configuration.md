@@ -223,16 +223,17 @@ One table per set of boundary faces. `<name>` is the name in the mesh file.
 
 | Key | Type | Default | Description | # |
 |-----|------|---------|-------------|---|
-| `type` | string | req. | Boundary condition type, see below | O9 |
+| `type` | string | req. | Boundary condition type, see below | D38 |
 
-Proposed types and parameters (*open: O9*). Types marked "inflow" take a
-`turbulence` table ([Turbulence values](#turbulence-values)):
+Boundary-condition types (D38). All values are constant (profiles and time
+dependence: P7). Types marked "inflow" take a `turbulence` table
+([Turbulence values](#turbulence-values)):
 
-| `type` | Parameters (proposal) |
+| `type` | Parameters |
 |--------|-----------------------|
 | `"wall"` | No-slip wall. Optional `velocity = [u, v]` for a moving wall (e.g. cavity lid) |
-| `"slip-wall"` | Inviscid wall, zero normal velocity |
-| `"symmetry"` | Symmetry plane |
+| `"slip-wall"` | Identical to `"symmetry"`: zero normal velocity, no shear stress |
+| `"symmetry"` | Symmetry plane: zero normal velocity, no shear stress |
 | `"farfield"` | `velocity` (magnitude, m/s), `angle_of_attack` (deg, default 0), `pressure` (Pa, default 0); inflow: `turbulence` |
 | `"velocity-inlet"` | `velocity = [u, v]` in m/s; inflow: `turbulence` |
 | `"total-pressure-inlet"` | `total_pressure` (Pa), `flow_direction`; inflow: `turbulence` |
@@ -335,5 +336,4 @@ Needed for force and moment coefficients, and for `fluid.reynolds_number`.
 
 ## 6. Open questions
 
-None in the configuration itself. The boundary-condition types and their
-parameters follow from requirement step 9 (O9).
+Consistency rules for boundary conditions (requirement step 9b, O9).

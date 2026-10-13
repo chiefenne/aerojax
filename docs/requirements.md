@@ -8,7 +8,7 @@ Living document, updated after each requirement step.
 - **X** – not planned
 - **O** – open requirement step, with the current proposal
 
-Status: 2026-10-13, requirement steps 1–8 and the case configuration settled.
+Status: 2026-10-13, requirement steps 1–8, 9a and the case configuration settled.
 
 
 ## 1. Purpose and scope
@@ -66,6 +66,7 @@ Status: 2026-10-13, requirement steps 1–8 and the case configuration settled.
 | D35 | 8d | Pseudo-time CFL control | SER (switched evolution relaxation, Mulder & van Leer 1985): CFLₙ = CFLₙ₋₁·‖Rₙ₋₁‖/‖Rₙ‖, capped at CFL_max. Safeguards: on a strong residual increase, linear-solver failure or non-physical update, the update is rejected and the CFL is cut (×0.1) | Standard rule of pseudo-transient continuation (Kelley & Keyes 1998); PETSc TSPSEUDO default |
 | D36 | 8d | First-order start | Optional `numerics.first_order_iterations` (default 0): first n iterations at first order, then second order | Robustness aid for difficult start-ups |
 | D37 | 8d | Inner iterations (dual time stepping) | First time step BDF1, then BDF2. Inner loop uses the steady nonlinear solver (pseudo-time, Newton–Krylov, SER). Per-step convergence: inner residual drop (tentative 3 orders) or maximum inner iterations (tentative 50); verified with the Taylor–Green vortex. Fixed physical time step | Adaptive Δt: P6 |
+| D38 | 9a | Boundary-condition types | `wall` (no-slip, optional wall velocity), `symmetry`, `slip-wall` (identical to `symmetry`, kept for clearer intent), `farfield`, `velocity-inlet`, `total-pressure-inlet`, `pressure-outlet`, `periodic`, `transpiration-wall`. Constant values | SU2 also implements its Euler wall identically to symmetry. Profiles and time dependence: P7; mass-flow conditions: P8 |
 
 
 ## 3. Planned for later
@@ -89,6 +90,8 @@ Status: 2026-10-13, requirement steps 1–8 and the case configuration settled.
 | P4 | Transonic airfoil cases (e.g. RAE2822) | Depends on L1 |
 | P5 | JST central scheme as a second convective flux | Cross-check option for D21 |
 | P6 | Adaptive physical time step | For unsteady runs (D37) |
+| P7 | Spatial profiles and time dependence of boundary values | E.g. parabolic inlet profile, values from a CSV table, pulsed blowing |
+| P8 | Further boundary-condition types | E.g. mass-flow inlet and outlet |
 
 
 ## 5. Not planned
@@ -105,7 +108,7 @@ Status: 2026-10-13, requirement steps 1–8 and the case configuration settled.
 
 | ID  | Topic | Current proposal |
 |-----|-------|------------------|
-| O9  | Boundary-condition set | No-slip wall, symmetry/slip wall, velocity inlet, total-pressure inlet, static-pressure outlet, farfield, periodic, transpiration wall (D18). SA inflow value via the ν̃/ν ratio. Consistency checks at setup |
+| O9  | Boundary conditions (remaining) | 9b consistency rules: pressure level without a pressure boundary, driving force for periodic channels, walls in Euler mode, periodic pairs, mass balance |
 | O10 | Test cases, reference data | Plane Couette and Poiseuille (exact; order of accuracy on all mesh types). Blasius flat plate. Lid-driven cavity Re 100/1000 (Ghia, Ghia & Shin 1982; optional). Cylinder: potential flow (inviscid), Schäfer–Turek 2D-1 (Re 20) and 2D-2 (Re 100, unsteady). 2D Taylor–Green vortex (time accuracy). Turbulent channel vs DNS (Moser, Kim & Mansour 1999; Lee & Moser 2015). NASA TMR zero-pressure-gradient flat plate (SA). Candidate validation: SD7003 at Re = 60,000 (laminar separation bubble). References still to be checked |
 | O11 | Meshes and I/O | In-code mesh generators (quadrilateral, triangle, polygon, mixed; several refinement levels; NumPy only). `.su2` reader. VTU output for ParaView. Plotting library (matplotlib proposed) |
 | O12 | Software setup | conda (conda-forge); Python 3.13 with jax/jaxlib 0.10.2 (tentative: conda-forge has osx-64 builds for py311 and py313). `pyproject.toml`, src layout. pytest with fast/slow markers. ruff. NumPy-style docstrings. GitHub Actions on Linux and macOS arm64. Units and non-dimensionalization. Typical mesh sizes and runtime targets. Stage-0 micro-benchmark JAX vs Numba |
