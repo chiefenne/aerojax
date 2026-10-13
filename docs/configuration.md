@@ -37,6 +37,9 @@ marked *open: Ox* depend on open requirement steps in
   default.
 - **Examples:** every test case ships with a commented example case file
   (D30).
+- **Python API:** exposes the same structure as the case file (D41). There,
+  boundary values may also be functions u(x, y, t); the case file supports
+  constant values (profiles: P7).
 
 
 ## 2. Sections

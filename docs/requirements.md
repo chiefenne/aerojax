@@ -8,7 +8,7 @@ Living document, updated after each requirement step.
 - **X** – not planned
 - **O** – open requirement step, with the current proposal
 
-Status: 2026-10-13, requirement steps 1–9 and the case configuration settled.
+Status: 2026-10-13, requirement steps 1–10 and the case configuration settled.
 
 
 ## 1. Purpose and scope
@@ -68,6 +68,8 @@ Status: 2026-10-13, requirement steps 1–9 and the case configuration settled.
 | D37 | 8d | Inner iterations (dual time stepping) | First time step BDF1, then BDF2. Inner loop uses the steady nonlinear solver (pseudo-time, Newton–Krylov, SER). Per-step convergence: inner residual drop (tentative 3 orders) or maximum inner iterations (tentative 50); verified with the Taylor–Green vortex. Fixed physical time step | Adaptive Δt: P6 |
 | D38 | 9a | Boundary-condition types | `wall` (no-slip, optional wall velocity), `symmetry`, `slip-wall` (identical to `symmetry`, kept for clearer intent), `farfield`, `velocity-inlet`, `total-pressure-inlet`, `pressure-outlet`, `periodic`, `transpiration-wall`. Constant values | SU2 also implements its Euler wall identically to symmetry. Profiles and time dependence: P7; mass-flow conditions: P8 |
 | D39 | 9b | Boundary-condition consistency rules | R1 assignment: every set of boundary faces gets exactly one condition; unknown names are errors ("did you mean …?"); a periodic pair is declared once. Face-level mesh check: every boundary face (face with one adjacent cell) belongs to exactly one set (no unassigned faces, no face in several sets), and sets contain boundary faces only; errors list the offending faces with count and coordinates. R2 pressure level: without a `pressure-outlet`, `farfield` or `total-pressure-inlet`, the pressure in one reference cell is fixed to `initial.pressure` (cell nearest `reference.pressure_point`, default the domain centroid), with a notice. R3 mass balance: without a pressure boundary, the prescribed net inflow must be zero. R4 periodic channels: driving force `physics.mean_pressure_gradient` (Pa/m); periodic faces matched by translation with a tolerance relative to the local face size. R5 Euler mode: `wall` treated as `slip-wall`, with a notice. R6 turbulence values: unused by the model → notice; on non-inflow types → error | Bulk-velocity control for periodic channels: P9 |
+| D40 | 10 | Test cases | Verification: V1 plane Couette (linear solution reproduced to round-off on every mesh type); V2 plane Poiseuille, periodic (order of accuracy on quad/triangle/polygon/mixed meshes, 4 levels); V3 2D Taylor–Green vortex (time order, spatial order incl. convective terms, pressure fixing); V4 inviscid cylinder (Euler, Cp = 1 − 4 sin²θ). Benchmarks: B1 Blasius flat plate (similarity solution computed in the repo); B2 DFG cylinder in channel 2D-1 (Re 20) and 2D-2 (Re 100, unsteady) (Schäfer & Turek 1996; 2D-1 reference values C_D = 5.57953523384, C_L = 0.010618948146, Δp = 0.11752016697, Nabh 1998); B3 lid-driven cavity Re 100/1000 (Ghia, Ghia & Shin 1982). RANS: R1 NASA TMR zero-pressure-gradient flat plate (SA; TMR is M = 0.2 compressible, incompressible results expected close but not identical); R2 NACA 0012, TMR 2DN00 (SA, Re 6·10⁶, α = 0/10/15°; Ladson, Gregory & O'Reilly). Later with L3: SD7003, Re 60,000 | Acceptance criteria (tentative): observed order 1.8–2.2 on the two finest levels; benchmark deviations stated per case; final tolerances in the stage plan |
+| D41 | 10 | Python API | A proper, documented Python API is a first-class interface alongside the TOML case file. In the API, boundary values may be functions u(x, y, t) (used e.g. for the parabolic DFG inflow); the TOML file supports constants until P7 | |
 
 
 ## 3. Planned for later
@@ -94,6 +96,9 @@ Status: 2026-10-13, requirement steps 1–9 and the case configuration settled.
 | P7 | Spatial profiles and time dependence of boundary values | E.g. parabolic inlet profile, values from a CSV table, pulsed blowing |
 | P8 | Further boundary-condition types | E.g. mass-flow inlet and outlet |
 | P9 | Bulk-velocity (mass-flow) control for periodic channels | Pressure gradient adjusted iteratively to a target bulk velocity (D39 R4) |
+| P10 | Point-vortex farfield correction | For lifting airfoils on meshes with a near farfield; NASA TMR recommends it unless the farfield is ~500 chords away. Decided at test case R2 |
+| P11 | Turbulent channel vs DNS | Lee & Moser 2015 (Re_τ 180–5200), SA validation for internal flow |
+| P12 | Method of manufactured solutions | Needs a source-term hook; for SA see Eça et al. 2006 |
 
 
 ## 5. Not planned
@@ -110,7 +115,6 @@ Status: 2026-10-13, requirement steps 1–9 and the case configuration settled.
 
 | ID  | Topic | Current proposal |
 |-----|-------|------------------|
-| O10 | Test cases, reference data | Plane Couette and Poiseuille (exact; order of accuracy on all mesh types). Blasius flat plate. Lid-driven cavity Re 100/1000 (Ghia, Ghia & Shin 1982; optional). Cylinder: potential flow (inviscid), Schäfer–Turek 2D-1 (Re 20) and 2D-2 (Re 100, unsteady). 2D Taylor–Green vortex (time accuracy). Turbulent channel vs DNS (Moser, Kim & Mansour 1999; Lee & Moser 2015). NASA TMR zero-pressure-gradient flat plate (SA). Candidate validation: SD7003 at Re = 60,000 (laminar separation bubble). References still to be checked |
 | O11 | Meshes and I/O | In-code mesh generators (quadrilateral, triangle, polygon, mixed; several refinement levels; NumPy only). `.su2` reader. VTU output for ParaView. Plotting library (matplotlib proposed) |
 | O12 | Software setup | conda (conda-forge); Python 3.13 with jax/jaxlib 0.10.2 (tentative: conda-forge has osx-64 builds for py311 and py313). `pyproject.toml`, src layout. pytest with fast/slow markers. ruff. NumPy-style docstrings. GitHub Actions on Linux and macOS arm64. Units and non-dimensionalization. Typical mesh sizes and runtime targets. Stage-0 micro-benchmark JAX vs Numba |
 | O13 | Stage plan | Final ordering of implementation stages and their test criteria |
@@ -134,6 +138,17 @@ Status: 2026-10-13, requirement steps 1–9 and the case configuration settled.
   Euler equations*, J. Comput. Phys. 59, 232–246 (1985)
 - C. T. Kelley, D. E. Keyes, *Convergence analysis of pseudo-transient
   continuation*, SIAM J. Numer. Anal. 35, 508–523 (1998)
+- M. Schäfer, S. Turek, *Benchmark computations of laminar flow around a
+  cylinder*, Notes on Numerical Fluid Mechanics 52, 547–566 (1996); reference
+  values: [featflow](https://wwwold.mathematik.tu-dortmund.de/~featflow/en/benchmarks/cfdbenchmarking/flow/dfg_benchmark1_re20.html)
+- U. Ghia, K. N. Ghia, C. T. Shin, *High-Re solutions for incompressible flow
+  using the Navier–Stokes equations and a multigrid method*, J. Comput. Phys.
+  48, 387–411 (1982)
+- NASA TMR verification and validation cases: [flat plate](https://tmbwg.github.io/turbmodels/flatplate.html),
+  [NACA 0012](https://tmbwg.github.io/turbmodels/naca0012_val.html)
+- L. Eça et al., *Manufactured solutions for one-equation turbulence models in
+  a two-dimensional steady wall-bounded incompressible turbulent flow*,
+  EPM-RT-2006-02 (2006) ([PolyPublie](https://publications.polymtl.ca/3150))
 - O. Oxtoby et al., *A family of first-order accurate gradient schemes for
   finite volume methods* (2019) ([arXiv](https://arxiv.org/abs/1912.08064))
 - SU2 documentation: [Slope Limiters and Shock Resolution](https://su2code.github.io/docs_v7/Slope-Limiters-and-Shock-Resolution/)
