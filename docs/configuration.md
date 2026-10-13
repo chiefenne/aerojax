@@ -193,7 +193,12 @@ case file (O11).
 | Key | Type | Default | Description | # |
 |-----|------|---------|-------------|---|
 | `density` | float | req. | ρ in kg/m³ (constant, D5) | |
-| `viscosity` | float | req. unless `model = "euler"` | Dynamic viscosity μ in Pa·s | |
+| `viscosity` | float | – | Dynamic viscosity μ in Pa·s | |
+| `reynolds_number` | float | – | Re = ρ U_ref L_ref / μ. μ is derived from it, using `[reference]` velocity and length | D31 |
+
+Exactly one of `viscosity` and `reynolds_number` is required, except for
+`model = "euler"`. Non-dimensional setup: `density = 1.0`, reference velocity
+and length `1.0`, `reynolds_number = Re` → μ = 1/Re.
 
 ### `[initial]`
 
@@ -235,13 +240,13 @@ types also open):
 
 ### `[reference]`
 
-Only needed for force and moment coefficients.
+Needed for force and moment coefficients, and for `fluid.reynolds_number`.
 
 | Key | Type | Default | Description | # |
 |-----|------|---------|-------------|---|
-| `length` | float | `1.0` | Reference length (e.g. chord) in m | |
+| `length` | float | `1.0`; req. with `fluid.reynolds_number` | Reference length (e.g. chord, channel height) in m | D31 |
 | `moment_center` | [float, float] | `[0.25, 0.0]` × `length` | Moment reference point in m | |
-| `velocity` | float | farfield velocity, if exactly one farfield boundary | Reference velocity in m/s | D28 |
+| `velocity` | float | farfield velocity, if exactly one farfield boundary; otherwise req. with `fluid.reynolds_number` | Reference velocity in m/s | D28, D31 |
 | `angle_of_attack` | float | farfield angle of attack | Defines the drag and lift directions | D28 |
 | `density` | float | `fluid.density` | Reference density in kg/m³ | |
 
@@ -269,7 +274,7 @@ Only needed for force and moment coefficients.
 | `residual_drop` | float | `8.0` | Convergence: orders of magnitude of residual reduction | |
 | `cfl` | table | `{ start = 10.0, max = 1.0e4, adaptive = true }` | Pseudo-time CFL number | O8d |
 | `newton_krylov` | table | `{ enabled = true, switch_at_residual_drop = 2.0 }` | Switch from approximate-Jacobian iterations to Newton–Krylov | D25 |
-| `linear_solver` | table | – | *open: O8b* | O8b |
+| `linear_solver` | table | `{ type = "direct" }` | `"direct"`: sparse LU (SciPy SuperLU), option `refactor_interval`. `"gmres-ilu"`: GMRES with ILU, options `tolerance`, `restart`, `ilu_drop_tolerance`, `ilu_fill_factor`. Default parameter values set from measurements in the first implicit stage | D32 |
 | `turbulence_coupling` | string | – | *open: O8c* | O8c |
 
 ### `[time]`
@@ -296,6 +301,4 @@ Only needed for force and moment coefficients.
 
 ## 6. Open questions
 
-1. Input via Reynolds number and reference length as an alternative to
-   dimensional fluid properties (O12).
-2. Turbulence values at inflow boundaries and in the initial state (O9).
+1. Turbulence values at inflow boundaries and in the initial state (O9).

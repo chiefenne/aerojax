@@ -8,7 +8,7 @@ Living document, updated after each requirement step.
 - **X** – not planned
 - **O** – open requirement step, with the current proposal
 
-Status: 2026-10-13, requirement steps 1–7, 8a and the configuration format and structure settled.
+Status: 2026-10-13, requirement steps 1–7, 8a, 8b and the configuration format and structure settled.
 
 
 ## 1. Purpose and scope
@@ -59,6 +59,8 @@ Status: 2026-10-13, requirement steps 1–7, 8a and the configuration format and
 | D28 | OC | Initial and boundary conditions | Separate `[initial]` and `[boundary.<name>]` sections. The farfield is a boundary condition and carries the freestream values. `[initial]` takes explicit values or `from_boundary = "<name>"`; default: the farfield boundary, if exactly one exists. `[reference]` defaults likewise from the farfield boundary | No separate freestream section |
 | D29 | OC | Boundary naming | `[boundary.<name>]`, with `<name>` = name of the boundary faces in the mesh. Documentation term: *boundary faces*; the equivalent terms of other codes are listed in the docs | SU2 "marker" not used |
 | D30 | OC | Example case files | Every test case ships with a commented example case file; the resolved configuration is written with comments (description, unit, explicit or default) | Helps avoid misconfiguration |
+| D31 | OC | Reynolds-number input | `fluid.reynolds_number` as an alternative to `fluid.viscosity`; μ derived from the reference velocity and length | |
+| D32 | 8b | Linear solver | Both behind one `linear_solver` setting: sparse direct LU (SciPy SuperLU), factorization reused over several iterations, as default; GMRES with ILU (SciPy) for large meshes. Default parameters and mesh-size threshold set from measurements on real Jacobians in the first implicit stage | Synthetic benchmark (2 cores): LU 0.6 s / 5.6 s / 16.7 s at 10k / 50k / 100k cells, ~1.2 GB at 100k. GMRES inside JAX with block-Jacobi: kept possible for P3 |
 
 
 ## 3. Planned for later
@@ -97,8 +99,8 @@ Status: 2026-10-13, requirement steps 1–7, 8a and the configuration format and
 
 | ID  | Topic | Current proposal |
 |-----|-------|------------------|
-| O8  | Solver (remaining) | 8b linear solver (SciPy sparse). 8c coupling of SA to the mean flow: loose (as in SU2) or fully coupled. 8d start-up strategy (CFL ramping) and inner iterations of dual time stepping |
-| OC  | Case configuration (remaining) | Input via Reynolds number as an alternative to dimensional fluid properties (with O12); turbulence values at boundaries and in the initial state (with O9) |
+| O8  | Solver (remaining) | 8c coupling of SA to the mean flow: loose (as in SU2) or fully coupled. 8d start-up strategy (CFL ramping) and inner iterations of dual time stepping |
+| OC  | Case configuration (remaining) | Turbulence values at inflow boundaries and in the initial state (with O9) |
 | O9  | Boundary-condition set | No-slip wall, symmetry/slip wall, velocity inlet, total-pressure inlet, static-pressure outlet, farfield, periodic, transpiration wall (D18). SA inflow value via the ν̃/ν ratio. Consistency checks at setup |
 | O10 | Test cases, reference data | Plane Couette and Poiseuille (exact; order of accuracy on all mesh types). Blasius flat plate. Lid-driven cavity Re 100/1000 (Ghia, Ghia & Shin 1982; optional). Cylinder: potential flow (inviscid), Schäfer–Turek 2D-1 (Re 20) and 2D-2 (Re 100, unsteady). 2D Taylor–Green vortex (time accuracy). Turbulent channel vs DNS (Moser, Kim & Mansour 1999; Lee & Moser 2015). NASA TMR zero-pressure-gradient flat plate (SA). Candidate validation: SD7003 at Re = 60,000 (laminar separation bubble). References still to be checked |
 | O11 | Meshes and I/O | In-code mesh generators (quadrilateral, triangle, polygon, mixed; several refinement levels; NumPy only). `.su2` reader. VTU output for ParaView. Plotting library (matplotlib proposed) |
