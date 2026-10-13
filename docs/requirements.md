@@ -8,7 +8,7 @@ Living document, updated after each requirement step.
 - **X** – not planned
 - **O** – open requirement step, with the current proposal
 
-Status: 2026-10-13, requirement steps 1–7, 8a and the configuration format settled.
+Status: 2026-10-13, requirement steps 1–7, 8a and the configuration format and structure settled.
 
 
 ## 1. Purpose and scope
@@ -56,6 +56,9 @@ Status: 2026-10-13, requirement steps 1–7, 8a and the configuration format set
 | D25 | 8a | Nonlinear solver | Implicit pseudo-time stepping with an approximate first-order Jacobian (from AD of the first-order face flux, assembled sparse) and adaptive CFL; then a switch to Newton–Krylov with exact Jacobian-vector products (`jax.jvp`), preconditioned by the first-order Jacobian. Explicit Runge–Kutta pseudo-time stepping kept as a reference and debugging mode | Same approach as SU2's `NEWTON_KRYLOV`, but exact JVPs instead of finite differences. Also used for the inner iterations of dual time stepping (D9) |
 | D26 | –  | Case configuration: naming | Names follow standard literature terminology and established acronyms (e.g. CFL, MUSCL, FDS, BDF2, GMRES, ILU, SA, RANS); SU2 option names are not copied | Readability is a primary requirement; the SU2 `.cfg` style is considered poor UX |
 | D27 | OC | Case configuration: format | TOML (read with the standard library, `tomllib`). Every key with a sensible default is optional. Validation before the run (unknown keys with "did you mean …?", types, ranges, consistency). The resolved configuration including defaults is written to the output directory | YAML rejected (implicit typing: PyYAML reads `1e-5` as a string, `no` as false); JSON rejected (no comments). Key list: [configuration.md](configuration.md) |
+| D28 | OC | Initial and boundary conditions | Separate `[initial]` and `[boundary.<name>]` sections. The farfield is a boundary condition and carries the freestream values. `[initial]` takes explicit values or `from_boundary = "<name>"`; default: the farfield boundary, if exactly one exists. `[reference]` defaults likewise from the farfield boundary | No separate freestream section |
+| D29 | OC | Boundary naming | `[boundary.<name>]`, with `<name>` = name of the boundary faces in the mesh. Documentation term: *boundary faces*; the equivalent terms of other codes are listed in the docs | SU2 "marker" not used |
+| D30 | OC | Example case files | Every test case ships with a commented example case file; the resolved configuration is written with comments (description, unit, explicit or default) | Helps avoid misconfiguration |
 
 
 ## 3. Planned for later
@@ -95,7 +98,7 @@ Status: 2026-10-13, requirement steps 1–7, 8a and the configuration format set
 | ID  | Topic | Current proposal |
 |-----|-------|------------------|
 | O8  | Solver (remaining) | 8b linear solver (SciPy sparse). 8c coupling of SA to the mean flow: loose (as in SU2) or fully coupled. 8d start-up strategy (CFL ramping) and inner iterations of dual time stepping |
-| OC  | Case configuration | Review the draft key list in [configuration.md](configuration.md) |
+| OC  | Case configuration (remaining) | Input via Reynolds number as an alternative to dimensional fluid properties (with O12); turbulence values at boundaries and in the initial state (with O9) |
 | O9  | Boundary-condition set | No-slip wall, symmetry/slip wall, velocity inlet, total-pressure inlet, static-pressure outlet, farfield, periodic, transpiration wall (D18). SA inflow value via the ν̃/ν ratio. Consistency checks at setup |
 | O10 | Test cases, reference data | Plane Couette and Poiseuille (exact; order of accuracy on all mesh types). Blasius flat plate. Lid-driven cavity Re 100/1000 (Ghia, Ghia & Shin 1982; optional). Cylinder: potential flow (inviscid), Schäfer–Turek 2D-1 (Re 20) and 2D-2 (Re 100, unsteady). 2D Taylor–Green vortex (time accuracy). Turbulent channel vs DNS (Moser, Kim & Mansour 1999; Lee & Moser 2015). NASA TMR zero-pressure-gradient flat plate (SA). Candidate validation: SD7003 at Re = 60,000 (laminar separation bubble). References still to be checked |
 | O11 | Meshes and I/O | In-code mesh generators (quadrilateral, triangle, polygon, mixed; several refinement levels; NumPy only). `.su2` reader. VTU output for ParaView. Plotting library (matplotlib proposed) |

@@ -15,8 +15,11 @@ marked *open: Ox* depend on open requirement steps in
     `"venkatakrishnan-wang"`.
   - Acronyms keep their usual meaning: `cfl`, `muscl`, `fds`, `bdf2`,
     `gmres`, `ilu`.
-- **Units:** SI and angles in degrees. Units are documented, not encoded in
-  key names. *Open: O12 (non-dimensionalization).*
+- **Units:** SI and angles in degrees. Units are documented and shown in the
+  example comments, not encoded in key names. *Open: O12
+  (non-dimensionalization).*
+- **Structure:** initial conditions and boundary conditions are separate
+  sections. The farfield is a boundary condition (D28).
 - **Defaults:** every key that has a sensible default is optional, so a
   minimal case file stays short.
 - **Validation** before the run starts:
@@ -24,8 +27,14 @@ marked *open: Ox* depend on open requirement steps in
   - Types and value ranges are checked.
   - Combinations are checked for consistency, e.g. `turbulence` requires
     `model = "rans"`.
+  - Every set of boundary faces in the mesh must have exactly one boundary
+    condition.
 - **Reproducibility:** the resolved configuration, including all defaults, is
-  written to the output directory.
+  written to the output directory. Each key carries a comment with its
+  description and unit, and says whether the value was set explicitly or is a
+  default.
+- **Examples:** every test case ships with a commented example case file
+  (D30).
 
 
 ## 2. Sections
@@ -36,48 +45,114 @@ marked *open: Ox* depend on open requirement steps in
 | `[mesh]` | Mesh file, scaling |
 | `[physics]` | Flow model, turbulence model, transition |
 | `[fluid]` | Fluid properties |
-| `[freestream]` | Freestream state; also the default initial state and farfield state |
+| `[initial]` | Initial conditions |
+| `[boundary.<name>]` | Boundary condition for the boundary faces called `<name>` in the mesh |
 | `[reference]` | Reference values for force and moment coefficients |
-| `[initial]` | Initial state, if it differs from the freestream |
-| `[[boundary]]` | One entry per boundary marker |
 | `[numerics]` | Spatial discretization |
 | `[solver]` | Pseudo-time / nonlinear solver, convergence |
 | `[time]` | Steady or unsteady, physical time stepping |
 | `[output]` | Result files, monitoring |
 
 
-## 3. Minimal example
+## 3. Boundary faces
+
+A *set of boundary faces* is a named group of mesh faces on the domain
+boundary, e.g. `airfoil`, `inlet`, `outer`. The mesh file defines the names.
+The case file assigns one boundary condition to each name:
 
 ```toml
-# Laminar plane Poiseuille flow
-[mesh]
-file = "channel_quad_L2.su2"
-
-[physics]
-model = "laminar"
-
-[fluid]
-density = 1.0
-viscosity = 0.01
-
-[freestream]
-velocity = 1.0
-
-[[boundary]]
-marker = "inlet"
-type = "velocity-inlet"
-
-[[boundary]]
-marker = "outlet"
-type = "pressure-outlet"
-
-[[boundary]]
-marker = ["upper", "lower"]
+[boundary.airfoil]        # "airfoil" = name of the boundary faces in the mesh
 type = "wall"
 ```
 
+Names containing characters other than letters, digits, `_` and `-` must be
+quoted: `[boundary."wall 1"]`.
 
-## 4. Reference
+The same concept in other tools:
+
+| Tool | Term |
+|------|------|
+| SU2 | marker (`MARKER_TAG`) |
+| OpenFOAM | patch |
+| Ansys Fluent | boundary zone |
+| Gmsh | physical group (physical curve in 2D) |
+| CGNS | boundary condition (`BC_t`) / family |
+
+
+## 4. Examples
+
+### 4.1 Laminar plane Poiseuille flow (channel)
+
+```toml
+# Laminar plane Poiseuille flow, Re = 100 (based on channel height and mean velocity)
+
+[mesh]
+file = "channel_quad_L2.su2"     # boundary faces: inlet, outlet, upper, lower
+
+[physics]
+model = "laminar"                # "euler" | "laminar" | "rans"
+
+[fluid]
+density = 1.0                    # kg/m^3
+viscosity = 0.01                 # dynamic viscosity, Pa s
+
+[initial]                        # fluid at rest
+velocity = [0.0, 0.0]            # m/s
+pressure = 0.0                   # Pa, gauge
+
+[boundary.inlet]
+type = "velocity-inlet"
+velocity = [1.0, 0.0]            # m/s, uniform profile
+
+[boundary.outlet]
+type = "pressure-outlet"
+pressure = 0.0                   # Pa, gauge; fixes the pressure level
+
+[boundary.upper]
+type = "wall"                    # no-slip
+
+[boundary.lower]
+type = "wall"
+```
+
+### 4.2 Airfoil in free flight
+
+```toml
+# NACA 0012, alpha = 4 deg, fully turbulent
+
+[mesh]
+file = "naca0012.su2"            # boundary faces: airfoil, outer
+
+[physics]
+model = "rans"
+turbulence = "sa-neg"
+
+[fluid]
+density = 1.225                  # kg/m^3
+viscosity = 1.789e-5             # dynamic viscosity, Pa s
+
+[initial]
+from_boundary = "outer"          # uniform field = farfield state.
+                                 # May be omitted: with exactly one farfield
+                                 # boundary this is the default.
+
+[boundary.airfoil]
+type = "wall"
+
+[boundary.outer]
+type = "farfield"                # imposes the freestream state
+velocity = 14.6                  # m/s, magnitude
+angle_of_attack = 4.0            # deg
+pressure = 0.0                   # Pa, gauge
+# turbulence values: open (O9)
+
+[reference]
+length = 1.0                     # m, chord; velocity, density and flow
+                                 # direction are taken from boundary "outer"
+```
+
+
+## 5. Reference
 
 Notation: **req.** = required; **–** = no default. The `#` column links an
 entry to a decision (D) or an open step (O) in `requirements.md`.
@@ -111,7 +186,7 @@ case file (O11).
 | Key | Type | Default | Description | # |
 |-----|------|---------|-------------|---|
 | `mode` | `"none"` \| `"prescribed"` | `"none"` | `"none"` = fully turbulent | D15 |
-| `laminar_region` | array of tables | – | Regions where SA production is switched off. Exact form (e.g. `{ marker = "airfoil", side = "upper", x_max = 0.35 }`) is settled in the transition stage | D15 |
+| `laminar_region` | array of tables | – | Regions where SA production is switched off. Exact form (e.g. `{ boundary = "airfoil", side = "upper", x_max = 0.35 }`) is settled in the transition stage | D15 |
 
 ### `[fluid]`
 
@@ -120,58 +195,55 @@ case file (O11).
 | `density` | float | req. | ρ in kg/m³ (constant, D5) | |
 | `viscosity` | float | req. unless `model = "euler"` | Dynamic viscosity μ in Pa·s | |
 
-### `[freestream]`
-
-| Key | Type | Default | Description | # |
-|-----|------|---------|-------------|---|
-| `velocity` | float | req. | Magnitude U∞ in m/s | |
-| `angle_of_attack` | float | `0.0` | α in degrees | |
-| `pressure` | float | `0.0` | Gauge pressure in Pa (incompressible: only differences matter) | |
-| `nu_tilde_ratio` | float | `3.0` | SA: ν̃∞/ν∞ (SU2 default 3) | D11 |
-
-### `[reference]`
-
-| Key | Type | Default | Description | # |
-|-----|------|---------|-------------|---|
-| `length` | float | `1.0` | Reference length (e.g. chord) in m | |
-| `moment_center` | [float, float] | `[0.25, 0.0]` × `length` | Moment reference point in m | |
-| `velocity` | float | `freestream.velocity` | Reference velocity for coefficients | |
-| `density` | float | `fluid.density` | Reference density for coefficients | |
-
 ### `[initial]`
 
-All keys default to the freestream state.
+Either explicit values or `from_boundary`, not both.
 
 | Key | Type | Default | Description | # |
 |-----|------|---------|-------------|---|
-| `velocity` | [float, float] | freestream vector | (u, v) in m/s | D16 |
-| `pressure` | float | `freestream.pressure` | Gauge pressure in Pa | D16 |
-| `nu_tilde_ratio` | float | `freestream.nu_tilde_ratio` | SA initial value | D16 |
+| `velocity` | [float, float] | – | (u, v) in m/s | D16 |
+| `pressure` | float | – | Gauge pressure in Pa | D16 |
+| turbulence | – | – | *open: O9* (same form as at boundaries) | D16, O9 |
+| `from_boundary` | string | name of the farfield boundary, if exactly one exists | Uniform field equal to the state of this boundary | D28 |
 | `restart` | path | – | Start from a previous solution (later) | |
 
-### `[[boundary]]`
+If `[initial]` is missing and the case has no single farfield boundary, the
+case is rejected with a message asking for `[initial]`.
 
-One table per boundary type and marker set. Every mesh marker must be
-assigned exactly once.
+### `[boundary.<name>]`
+
+One table per set of boundary faces. `<name>` is the name in the mesh file.
 
 | Key | Type | Default | Description | # |
 |-----|------|---------|-------------|---|
-| `marker` | string or array of strings | req. | Mesh marker name(s) | |
-| `type` | string | req. | Boundary type, see below | O9 |
+| `type` | string | req. | Boundary condition type, see below | O9 |
 
-Proposed types (*open: O9*):
+Proposed types and parameters (*open: O9*; turbulence values for all inflow
+types also open):
 
 | `type` | Parameters (proposal) |
 |--------|-----------------------|
 | `"wall"` | No-slip wall. Optional `velocity = [u, v]` for a moving wall (e.g. cavity lid) |
 | `"slip-wall"` | Inviscid wall, zero normal velocity |
 | `"symmetry"` | Symmetry plane |
-| `"velocity-inlet"` | `velocity = [u, v]` (default: freestream), `nu_tilde_ratio` |
-| `"total-pressure-inlet"` | `total_pressure`, `flow_direction`, `nu_tilde_ratio` |
-| `"pressure-outlet"` | `pressure` (default: freestream) |
-| `"farfield"` | Uses `[freestream]` |
-| `"periodic"` | `partner` marker, `translation = [dx, dy]` |
-| `"transpiration-wall"` | `normal_velocity` (+ blowing, − suction), optional time dependence; `nu_tilde_ratio` for blown fluid (D18) |
+| `"farfield"` | `velocity` (magnitude, m/s), `angle_of_attack` (deg, default 0), `pressure` (Pa, default 0) |
+| `"velocity-inlet"` | `velocity = [u, v]` in m/s |
+| `"total-pressure-inlet"` | `total_pressure` (Pa), `flow_direction` |
+| `"pressure-outlet"` | `pressure` (Pa, default 0) |
+| `"periodic"` | `partner` (name of the matching boundary faces), `translation = [dx, dy]` (m) |
+| `"transpiration-wall"` | `normal_velocity` (m/s; + blowing, − suction), optional time dependence (D18) |
+
+### `[reference]`
+
+Only needed for force and moment coefficients.
+
+| Key | Type | Default | Description | # |
+|-----|------|---------|-------------|---|
+| `length` | float | `1.0` | Reference length (e.g. chord) in m | |
+| `moment_center` | [float, float] | `[0.25, 0.0]` × `length` | Moment reference point in m | |
+| `velocity` | float | farfield velocity, if exactly one farfield boundary | Reference velocity in m/s | D28 |
+| `angle_of_attack` | float | farfield angle of attack | Defines the drag and lift directions | D28 |
+| `density` | float | `fluid.density` | Reference density in kg/m³ | |
 
 ### `[numerics]`
 
@@ -218,13 +290,12 @@ Proposed types (*open: O9*):
 | `directory` | path | `"results"` | Relative to the case file | |
 | `formats` | array | `["vtu"]` | *open: O11* | O11 |
 | `interval` | int | `0` | Write every n iterations / time steps; 0 = only at the end | |
-| `force_markers` | array of strings | all walls | Markers over which forces and moments are integrated | |
+| `force_boundaries` | array of strings | all `"wall"` boundaries | Boundary faces over which forces and moments are integrated | |
 | `history` | bool | `true` | Residuals and coefficients per iteration (CSV) | |
 
 
-## 5. Open questions for review
+## 6. Open questions
 
-1. Section structure (§2): complete and logically split?
-2. Freestream input: dimensional (velocity, density, viscosity, as above), or
-   alternatively via Reynolds number and reference length? (O12)
-3. `[[boundary]]` with `marker` as a string or a list: acceptable?
+1. Input via Reynolds number and reference length as an alternative to
+   dimensional fluid properties (O12).
+2. Turbulence values at inflow boundaries and in the initial state (O9).
