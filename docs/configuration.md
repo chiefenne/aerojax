@@ -308,7 +308,7 @@ Needed for force and moment coefficients, and for `fluid.reynolds_number`.
 | `cfl` | table | `{ start = 10.0, max = 1.0e4, adaptive = true }` | Pseudo-time CFL number | O8d |
 | `newton_krylov` | table | `{ enabled = true, switch_at_residual_drop = 2.0 }` | Switch from approximate-Jacobian iterations to Newton–Krylov | D25 |
 | `linear_solver` | table | `{ type = "direct" }` | `"direct"`: sparse LU (SciPy SuperLU), option `refactor_interval`. `"gmres-ilu"`: GMRES with ILU, options `tolerance`, `restart`, `ilu_drop_tolerance`, `ilu_fill_factor`. Default parameter values set from measurements in the first implicit stage | D32 |
-| `turbulence_coupling` | string | – | *open: O8c* | O8c |
+| `turbulence_coupling` | `"segregated"` \| `"coupled"` | `"segregated"` | `"segregated"`: mean flow and turbulence equations solved one after the other per iteration; `"coupled"`: one system for all variables | D34 |
 
 ### `[time]`
 
