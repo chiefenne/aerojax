@@ -28,7 +28,9 @@ marked *open: Ox* depend on open requirement steps in
   - Combinations are checked for consistency, e.g. `turbulence` requires
     `model = "rans"`.
   - Every set of boundary faces in the mesh must have exactly one boundary
-    condition.
+    condition, and every boundary face must belong to exactly one set (no
+    unassigned faces, no face in several sets). Further rules for boundary
+    conditions: D39.
 - **Reproducibility:** the resolved configuration, including all defaults, is
   written to the output directory. Each key carries a comment with its
   description and unit, and says whether the value was set explicitly or is a
@@ -182,6 +184,7 @@ case file (O11).
 |-----|------|---------|-------------|---|
 | `model` | `"euler"` \| `"laminar"` \| `"rans"` | req. | Governing equations | D10 |
 | `turbulence` | `"sa-neg"` | `"sa-neg"` if `model = "rans"` | Turbulence model; `"sst"` later | D11, L2 |
+| `mean_pressure_gradient` | [float, float] | – | Driving force for periodic channels: constant mean pressure gradient (dp/dx, dp/dy) in Pa/m, applied as a momentum source | D39 |
 
 `[physics.transition]`, only for `model = "rans"`:
 
@@ -238,7 +241,7 @@ dependence: P7). Types marked "inflow" take a `turbulence` table
 | `"velocity-inlet"` | `velocity = [u, v]` in m/s; inflow: `turbulence` |
 | `"total-pressure-inlet"` | `total_pressure` (Pa), `flow_direction`; inflow: `turbulence` |
 | `"pressure-outlet"` | `pressure` (Pa, default 0) |
-| `"periodic"` | `partner` (name of the matching boundary faces), `translation = [dx, dy]` (m) |
+| `"periodic"` | `partner` (name of the matching boundary faces; gets no entry of its own), `translation = [dx, dy]` (m); driving force: `physics.mean_pressure_gradient` |
 | `"transpiration-wall"` | `normal_velocity` (m/s; + blowing, − suction), optional time dependence (D18); inflow (blowing): `turbulence` |
 
 ### Turbulence values
@@ -283,6 +286,7 @@ Needed for force and moment coefficients, and for `fluid.reynolds_number`.
 | `velocity` | float | farfield velocity, if exactly one farfield boundary; otherwise req. with `fluid.reynolds_number` | Reference velocity in m/s | D28, D31 |
 | `angle_of_attack` | float | farfield angle of attack | Defines the drag and lift directions | D28 |
 | `density` | float | `fluid.density` | Reference density in kg/m³ | |
+| `pressure_point` | [float, float] | domain centroid | Only without a pressure-fixing boundary: the pressure in the cell nearest this point is fixed to `initial.pressure` | D39 |
 
 ### `[numerics]`
 
@@ -336,4 +340,4 @@ Needed for force and moment coefficients, and for `fluid.reynolds_number`.
 
 ## 6. Open questions
 
-Consistency rules for boundary conditions (requirement step 9b, O9).
+None.

@@ -8,7 +8,7 @@ Living document, updated after each requirement step.
 - **X** – not planned
 - **O** – open requirement step, with the current proposal
 
-Status: 2026-10-13, requirement steps 1–8, 9a and the case configuration settled.
+Status: 2026-10-13, requirement steps 1–9 and the case configuration settled.
 
 
 ## 1. Purpose and scope
@@ -67,6 +67,7 @@ Status: 2026-10-13, requirement steps 1–8, 9a and the case configuration settl
 | D36 | 8d | First-order start | Optional `numerics.first_order_iterations` (default 0): first n iterations at first order, then second order | Robustness aid for difficult start-ups |
 | D37 | 8d | Inner iterations (dual time stepping) | First time step BDF1, then BDF2. Inner loop uses the steady nonlinear solver (pseudo-time, Newton–Krylov, SER). Per-step convergence: inner residual drop (tentative 3 orders) or maximum inner iterations (tentative 50); verified with the Taylor–Green vortex. Fixed physical time step | Adaptive Δt: P6 |
 | D38 | 9a | Boundary-condition types | `wall` (no-slip, optional wall velocity), `symmetry`, `slip-wall` (identical to `symmetry`, kept for clearer intent), `farfield`, `velocity-inlet`, `total-pressure-inlet`, `pressure-outlet`, `periodic`, `transpiration-wall`. Constant values | SU2 also implements its Euler wall identically to symmetry. Profiles and time dependence: P7; mass-flow conditions: P8 |
+| D39 | 9b | Boundary-condition consistency rules | R1 assignment: every set of boundary faces gets exactly one condition; unknown names are errors ("did you mean …?"); a periodic pair is declared once. Face-level mesh check: every boundary face (face with one adjacent cell) belongs to exactly one set (no unassigned faces, no face in several sets), and sets contain boundary faces only; errors list the offending faces with count and coordinates. R2 pressure level: without a `pressure-outlet`, `farfield` or `total-pressure-inlet`, the pressure in one reference cell is fixed to `initial.pressure` (cell nearest `reference.pressure_point`, default the domain centroid), with a notice. R3 mass balance: without a pressure boundary, the prescribed net inflow must be zero. R4 periodic channels: driving force `physics.mean_pressure_gradient` (Pa/m); periodic faces matched by translation with a tolerance relative to the local face size. R5 Euler mode: `wall` treated as `slip-wall`, with a notice. R6 turbulence values: unused by the model → notice; on non-inflow types → error | Bulk-velocity control for periodic channels: P9 |
 
 
 ## 3. Planned for later
@@ -92,6 +93,7 @@ Status: 2026-10-13, requirement steps 1–8, 9a and the case configuration settl
 | P6 | Adaptive physical time step | For unsteady runs (D37) |
 | P7 | Spatial profiles and time dependence of boundary values | E.g. parabolic inlet profile, values from a CSV table, pulsed blowing |
 | P8 | Further boundary-condition types | E.g. mass-flow inlet and outlet |
+| P9 | Bulk-velocity (mass-flow) control for periodic channels | Pressure gradient adjusted iteratively to a target bulk velocity (D39 R4) |
 
 
 ## 5. Not planned
@@ -108,7 +110,6 @@ Status: 2026-10-13, requirement steps 1–8, 9a and the case configuration settl
 
 | ID  | Topic | Current proposal |
 |-----|-------|------------------|
-| O9  | Boundary conditions (remaining) | 9b consistency rules: pressure level without a pressure boundary, driving force for periodic channels, walls in Euler mode, periodic pairs, mass balance |
 | O10 | Test cases, reference data | Plane Couette and Poiseuille (exact; order of accuracy on all mesh types). Blasius flat plate. Lid-driven cavity Re 100/1000 (Ghia, Ghia & Shin 1982; optional). Cylinder: potential flow (inviscid), Schäfer–Turek 2D-1 (Re 20) and 2D-2 (Re 100, unsteady). 2D Taylor–Green vortex (time accuracy). Turbulent channel vs DNS (Moser, Kim & Mansour 1999; Lee & Moser 2015). NASA TMR zero-pressure-gradient flat plate (SA). Candidate validation: SD7003 at Re = 60,000 (laminar separation bubble). References still to be checked |
 | O11 | Meshes and I/O | In-code mesh generators (quadrilateral, triangle, polygon, mixed; several refinement levels; NumPy only). `.su2` reader. VTU output for ParaView. Plotting library (matplotlib proposed) |
 | O12 | Software setup | conda (conda-forge); Python 3.13 with jax/jaxlib 0.10.2 (tentative: conda-forge has osx-64 builds for py311 and py313). `pyproject.toml`, src layout. pytest with fast/slow markers. ruff. NumPy-style docstrings. GitHub Actions on Linux and macOS arm64. Units and non-dimensionalization. Typical mesh sizes and runtime targets. Stage-0 micro-benchmark JAX vs Numba |
