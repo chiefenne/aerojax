@@ -8,7 +8,7 @@ Living document, updated after each requirement step.
 - **X** – not planned
 - **O** – open requirement step, with the current proposal
 
-Status: 2026-10-13, requirement steps 1–11, most of 12a and the case configuration settled.
+Status: 2026-10-13, requirement steps 1–12 and the case configuration settled; stage plan (step 13) proposed.
 
 
 ## 1. Purpose and scope
@@ -78,6 +78,9 @@ Status: 2026-10-13, requirement steps 1–11, most of 12a and the case configura
 | D47 | 11c | Dependency policy | Core: numpy, scipy, jax/jaxlib (TOML via the standard library). Optional: matplotlib (plots only). Development: pytest, ruff. Any further dependency requires an explicit decision | |
 | D48 | 12a | Environment and packaging | `environment.yml` (conda-forge) with exactly pinned, tested versions: Python 3.13, jax/jaxlib 0.10.2, numpy, scipy, matplotlib, pytest, ruff. `pyproject.toml` (PEP 621, setuptools backend) with compatible version ranges (e.g. `jax>=0.10.2,<0.11`), extras `[plot]` and `[dev]`. Install: `conda env create -f environment.yml`, then `pip install -e . --no-deps`. CLI `aerojax run case.toml` and `aerojax check case.toml` (validate, print resolved configuration). float64 enabled on import (`jax_enable_x64`, documented). Versioning 0.x with Git tags and `CHANGELOG.md` | conda-forge needed on Intel macOS (no PyPI jaxlib) |
 | D49 | 12a | Testing | pytest, run locally on the iMac, the M4 and Linux. Fast tests by default; benchmark cases marked `slow`. Reference data as CSV with a source citation in the header | No CI (X5) |
+| D50 | 12a | Package layout | All source under `src/aerojax/` in subfolders (`config`, `mesh`, `physics`, `numerics`, `solver`, `io`, `plotting`, `cli.py`); `tests/`, `examples/`, `docs/` at the top level (not installed) | |
+| D51 | 12c | Non-dimensionalization | Internally non-dimensional with ρ_ref, U_ref, L_ref (p_ref = ρU², μ_ref = ρUL, t_ref = L/U); input and output in SI | Keeps variables O(1) and the Jacobian well conditioned |
+| D52 | 12c | Mesh size and performance | Typical meshes 50k–500k cells. No runtime target and no benchmark; the solver should be as fast as possible | Measured LU cost (step 8b) extrapolates to ~8 GB at 500k cells with 3 unknowns per cell (~15 GB with SA coupled): GMRES-ILU must be robust for large meshes; stronger preconditioner: P13 |
 
 
 ## 3. Planned for later
@@ -108,6 +111,7 @@ Status: 2026-10-13, requirement steps 1–11, most of 12a and the case configura
 | P10 | Point-vortex farfield correction | For lifting airfoils on meshes with a near farfield; NASA TMR recommends it unless the farfield is ~500 chords away. Decided at test case R2 |
 | P11 | Turbulent channel vs DNS | Lee & Moser 2015 (Re_τ 180–5200), SA validation for internal flow |
 | P12 | Method of manufactured solutions | Needs a source-term hook; for SA see Eça et al. 2006 |
+| P13 | Multigrid preconditioner (e.g. agglomeration multigrid) | If GMRES-ILU is not robust enough on 200k–500k-cell meshes (D52) |
 
 
 ## 5. Not planned
@@ -119,14 +123,41 @@ Status: 2026-10-13, requirement steps 1–11, most of 12a and the case configura
 | X3 | Apple Metal backend | No float64 support |
 | X4 | Pressure-based segregated solver (SIMPLE/PISO) | Replaced by D8 |
 | X5 | Continuous integration on GitHub | Decided in step 12a; tests run locally |
+| X6 | Runtime targets, Stage-0 benchmark | Decided in step 12c; performance is a continuous goal (D52) |
 
 
 ## 6. Open requirement steps
 
 | ID  | Topic | Current proposal |
 |-----|-------|------------------|
-| O12 | Software setup (remaining) | 12a package layout (src/ structure, to be clarified). 12c units and non-dimensionalization; typical mesh sizes and runtime targets; Stage-0 micro-benchmark JAX vs Numba (Numba conflicts with D47) |
-| O13 | Stage plan | Final ordering of implementation stages and their test criteria |
+| O13 | Stage plan | Proposal in section 7, to be confirmed |
+
+
+## 7. Stage plan (proposal, O13)
+
+Every stage ends with:
+
+- passing tests;
+- commented example case files (D30);
+- comparison plots;
+- updated documentation and `CHANGELOG.md`;
+- a Git tag `v0.<stage>`.
+
+Tests that need long runs are marked `slow` (D49).
+
+| Stage | Content | Tests, acceptance |
+|-------|---------|-------------------|
+| **0 Foundations** | Repository skeleton (D48, D50). Mesh data structure: faces with owner/neighbour cell, normals, areas, cell centroids and volumes, named boundary-face sets. Rectangle generators: quad, triangle, polygon, mixed; stretching, perturbation, 4 levels (D42). `.su2` reader (D43). Face-level boundary checks (D39 R1). VTU writer (D45). Mesh plot helper (D46) | Each cell closed (Σ n·dS = 0); total cell area = domain area; boundary checks detect gaps and overlaps; `.su2` reader on small hand-written files; VTU files load in ParaView |
+| **1 Operators and implicit machinery on a scalar equation** | Weighted least-squares gradients (D22), MUSCL reconstruction and Venkatakrishnan–Wang limiter (D23), α-damping face gradient (D24). Steady scalar convection–diffusion as a model problem: residual in JAX, first-order Jacobian by AD, sparse assembly, direct LU (D32), SER pseudo-time stepping (D35) | Gradients exact for linear fields on all mesh types (incl. boundary cells); limiter creates no new extrema; convection–diffusion with an exact exponential solution: observed order 1.8–2.2 on all mesh types |
+| **2 Laminar incompressible flow, steady** | Coupled INC formulation with FDS (D5, D8, D21). TOML reading, validation, resolved configuration (D27–D31), `.log` and CSV output (D45), CLI `run`/`check`. Boundary conditions `wall` (moving), `symmetry`/`slip-wall`, `velocity-inlet`, `pressure-outlet`, `periodic` with `mean_pressure_gradient`; pressure fixing and mass-balance check (D39). First-order start (D36); explicit Runge–Kutta reference mode (D25). Non-dimensionalization (D51) | V1 Couette: round-off error on all mesh types. V2 Poiseuille: order 1.8–2.2, 4 mesh types × 4 levels. B3 lid-driven cavity Re 100 and 1000 vs Ghia et al. Explicit and implicit modes converge to the same solution |
+| **3 Newton–Krylov, further boundary conditions, Euler** | Newton–Krylov with `jax.jvp` (D25); GMRES-ILU option and measured defaults (D32). Boundary conditions `farfield`, `total-pressure-inlet`, `transpiration-wall` (steady). Euler mode (D39 R5). Cylinder O-grid and DFG channel generators (D42). Function-valued boundary values in the Python API (D41). First profiling and optimization pass (D52) | V4 inviscid cylinder vs potential flow. B1 Blasius (Cf, velocity profiles). B2 DFG 2D-1 (C_D, C_L, Δp). Newton–Krylov converges to the same solution as stage 2, in fewer iterations |
+| **4 Unsteady flow** | Dual time stepping BDF1/BDF2 with inner iterations (D9, D37); PVD output; unsteady log layout (D45) | V3 Taylor–Green vortex: time order 2 (BDF2), spatial order incl. convective terms. B2 DFG 2D-2 (C_D,max, C_L,max, Strouhal number) |
+| **5 RANS: SA-neg** | SA-neg (D11) through the transport-equation interface (D13). Wall distance for every cell centre (new requirement for SA; also used for y⁺). Turbulence inputs and reporting (D33). Segregated/coupled switch (D34). Prescribed transition (D15). Second profiling pass on 200k–500k-cell meshes; GMRES-ILU robustness (D52, P13) | R1 flat plate (own grid family on the TMR domain): Cf at x = 0.97 and drag vs TMR grid-converged values, within the expected incompressible deviation |
+| **6 Airfoil** | NACA 0012 (TMR definition) meshed with PyAero (L4); forces, Cp and Cf output on walls; decision on the point-vortex farfield correction (P10) | R2 NACA 0012: C_L(α), C_D vs Ladson, Cp vs Gregory & O'Reilly at α = 0/10/15° |
+
+After stage 6, in an order to be decided: SST (L2), transition model with
+SD7003 validation (L3), Gmsh reader (L6), compressible solver (L1), and the
+"possible later" items.
 
 
 ## References
