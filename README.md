@@ -1,7 +1,7 @@
 # aerojax
 
 2D unstructured cell-centred finite-volume Navier–Stokes/RANS solver in
-Python/JAX with SU2-based numerics, developed as a companion to
+Python/JAX, developed as a companion to
 [PyAero](https://github.com/chiefenne/PyAero).
 
 **Status:** stage 2 of the [stage plan](docs/requirements.md#7-stage-plan-d53):
