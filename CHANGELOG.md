@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1 – Stage 1: operators and implicit machinery (not yet tagged)
+## 0.1 – Stage 1: operators and implicit machinery (2026-10-14)
 
 - Finite-volume geometry as JAX arrays (`aerojax.numerics.build_geometry`).
 - Weighted least-squares gradients on the vertex-neighbour stencil with
