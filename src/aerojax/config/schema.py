@@ -119,6 +119,17 @@ SCHEMA = {
             "Iterations at first order before switching to spatial_order",
             minimum=0,
         ),
+        "limiter_freeze": {
+            "after_iterations": Opt(
+                "int", None, "Freeze the limiter after this many iterations", minimum=0
+            ),
+            "after_residual_drop": Opt(
+                "float",
+                None,
+                "Freeze the limiter after this residual drop (orders)",
+                minimum=0.0,
+            ),
+        },
         "beta_factor": Opt(
             "float",
             4.1,
@@ -159,6 +170,48 @@ SCHEMA = {
             ),
             "explicit": Opt(
                 "float", 1.0, "CFL number of the explicit Runge-Kutta mode", minimum=0.0
+            ),
+        },
+        "newton_krylov": {
+            "enabled": Opt(
+                "bool",
+                True,
+                "Switch to Newton-Krylov (exact Jacobian-vector products, "
+                "preconditioned by the first-order Jacobian)",
+            ),
+            "switch_at_residual_drop": Opt(
+                "float",
+                2.0,
+                "Residual drop (orders of magnitude) at which to switch",
+                minimum=0.0,
+            ),
+            "linear_tolerance": Opt(
+                "float", 1.0e-2, "Relative GMRES tolerance per Newton step", minimum=0.0
+            ),
+            "restart": Opt("int", 50, "GMRES restart length", minimum=1),
+            "max_iterations": Opt(
+                "int", 200, "Maximum GMRES iterations per Newton step", minimum=1
+            ),
+        },
+        "linear_solver": {
+            "type": Opt(
+                "string",
+                "direct",
+                "Sparse solver of the start-up phase, preconditioner of Newton-Krylov",
+                choices=("direct", "gmres-ilu"),
+            ),
+            "tolerance": Opt(
+                "float", 1.0e-6, "Relative GMRES tolerance (gmres-ilu)", minimum=0.0
+            ),
+            "restart": Opt("int", 50, "GMRES restart length (gmres-ilu)", minimum=1),
+            "max_iterations": Opt(
+                "int", 500, "Maximum GMRES iterations (gmres-ilu)", minimum=1
+            ),
+            "ilu_drop_tolerance": Opt(
+                "float", 1.0e-5, "Drop tolerance of the incomplete LU", minimum=0.0
+            ),
+            "ilu_fill_factor": Opt(
+                "float", 20.0, "Fill factor of the incomplete LU", minimum=1.0
             ),
         },
     },
@@ -210,10 +263,7 @@ BOUNDARY_TYPES = {
 PLANNED = {
     "physics.turbulence": "stage 5 (RANS)",
     "physics.transition": "stage 5 (RANS)",
-    "solver.newton_krylov": "stage 3",
-    "solver.linear_solver": "stage 3",
     "solver.turbulence_coupling": "stage 5 (RANS)",
-    "numerics.limiter_freeze": "stage 3",
     "numerics.turbulence_spatial_order": "stage 5 (RANS)",
     "time.scheme": "stage 4 (unsteady)",
     "time.time_step": "stage 4 (unsteady)",

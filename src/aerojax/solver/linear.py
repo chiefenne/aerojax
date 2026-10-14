@@ -1,38 +1,178 @@
 """Linear solvers for the implicit iterations (D32).
 
-Stage 1 provides the direct sparse LU (SciPy SuperLU); GMRES with ILU follows
-in stage 3.
+Two solvers for the sparse system ``A x = b`` with ``A = T + J1``:
+
+- ``"direct"``: sparse LU (SciPy SuperLU). Robust, no parameters; memory and
+  time grow faster than the mesh size.
+- ``"gmres-ilu"``: restarted GMRES preconditioned by an incomplete LU
+  (SciPy ``spilu``), for large meshes.
+
+Both also serve as the preconditioner of the matrix-free Newton-Krylov
+solve (:func:`solve_matrix_free`), where the operator is ``T + J`` with the
+exact Jacobian applied through ``jax.jvp``.
 """
+
+from dataclasses import dataclass
 
 import numpy as np
 import scipy.sparse.linalg as spla
+
+SOLVERS = ("direct", "gmres-ilu")
 
 
 class LinearSolverError(RuntimeError):
     """Raised when the linear system cannot be solved."""
 
 
-def solve_direct(matrix, rhs):
-    """Solve ``matrix @ x = rhs`` with a sparse LU factorization.
+@dataclass(frozen=True)
+class LinearSettings:
+    """Settings of the linear solver.
+
+    Attributes
+    ----------
+    type : {"direct", "gmres-ilu"}
+    tolerance : float
+        Relative residual tolerance of GMRES (``"gmres-ilu"`` only).
+    restart : int
+        GMRES restart length.
+    max_iterations : int
+        Maximum GMRES iterations, i.e. matrix-vector products, rounded up to
+        whole restart cycles (``"gmres-ilu"`` only).
+    ilu_drop_tolerance : float
+        Drop tolerance of the incomplete LU.
+    ilu_fill_factor : float
+        Fill factor of the incomplete LU.
+
+    The ILU defaults were set on the 64x64 cavity at Re 1000: drop 1e-5 with
+    fill 20 needs about as many GMRES iterations as the exact LU (3 per
+    approximate-Jacobian step, 20 per Newton-Krylov step), while drop 1e-4
+    with fill 10 needs 70 and 170.
+    """
+
+    type: str = "direct"
+    tolerance: float = 1.0e-6
+    restart: int = 50
+    max_iterations: int = 500
+    ilu_drop_tolerance: float = 1.0e-5
+    ilu_fill_factor: float = 20.0
+
+
+class DirectLU:
+    """Sparse LU factorization of a matrix."""
+
+    def __init__(self, matrix):
+        try:
+            self._lu = spla.splu(matrix.tocsc())
+        except RuntimeError as exc:  # "Factor is exactly singular"
+            raise LinearSolverError(str(exc)) from exc
+        self.iterations = 0
+
+    def solve(self, rhs):
+        """Solve ``A x = rhs``."""
+        return _finite(self._lu.solve(rhs))
+
+    def precondition(self, rhs):
+        """Apply the preconditioner (here: the exact inverse)."""
+        return self._lu.solve(rhs)
+
+
+class GmresILU:
+    """GMRES with an incomplete-LU preconditioner."""
+
+    def __init__(self, matrix, settings):
+        self._matrix = matrix.tocsc()
+        self._settings = settings
+        try:
+            self._ilu = spla.spilu(
+                self._matrix,
+                drop_tol=settings.ilu_drop_tolerance,
+                fill_factor=settings.ilu_fill_factor,
+            )
+        except RuntimeError as exc:
+            raise LinearSolverError(str(exc)) from exc
+        self.iterations = 0
+
+    def solve(self, rhs):
+        """Solve ``A x = rhs`` with preconditioned GMRES."""
+        s = self._settings
+        x, self.iterations = solve_matrix_free(
+            self._matrix.dot,
+            rhs,
+            self.precondition,
+            tolerance=s.tolerance,
+            restart=s.restart,
+            max_iterations=s.max_iterations,
+        )
+        return x
+
+    def precondition(self, rhs):
+        """Apply the incomplete LU as a preconditioner."""
+        return self._ilu.solve(rhs)
+
+
+def factorize(matrix, settings=None):
+    """Return a solver object (:class:`DirectLU` or :class:`GmresILU`)."""
+    s = settings or LinearSettings()
+    if s.type == "direct":
+        return DirectLU(matrix)
+    if s.type == "gmres-ilu":
+        return GmresILU(matrix, s)
+    raise ValueError(f"linear solver type must be one of {SOLVERS}")
+
+
+def solve_matrix_free(
+    apply, rhs, precondition, tolerance=1.0e-2, restart=50, max_iterations=200
+):
+    """Right-preconditioned restarted GMRES for an operator given as a function.
 
     Parameters
     ----------
-    matrix : scipy.sparse matrix, shape (n, n)
-    rhs : ndarray, shape (n,)
+    apply : callable
+        ``apply(x) -> A x``.
+    rhs : ndarray
+    precondition : callable
+        ``precondition(r) -> M^-1 r``.
+    tolerance : float
+        Relative residual tolerance.
+    restart : int
+    max_iterations : int
+        Maximum matrix-vector products, rounded up to whole restart cycles.
 
     Returns
     -------
-    ndarray, shape (n,)
+    x : ndarray
+    iterations : int
+        Number of GMRES iterations (matrix-vector products).
 
     Raises
     ------
     LinearSolverError
-        If the matrix is singular or the solution is not finite.
+        If the solution is not finite.
     """
-    try:
-        x = spla.splu(matrix.tocsc()).solve(rhs)
-    except RuntimeError as exc:  # "Factor is exactly singular"
-        raise LinearSolverError(str(exc)) from exc
+    n = rhs.size
+    count = {"n": 0}
+
+    def counted(x):
+        count["n"] += 1
+        return apply(x)
+
+    op = spla.LinearOperator((n, n), matvec=counted, dtype=float)
+    pre = spla.LinearOperator((n, n), matvec=precondition, dtype=float)
+    cycles = max(1, -(-max_iterations // restart))  # maxiter counts restart cycles
+    x, info = spla.gmres(
+        op, rhs, M=pre, rtol=tolerance, restart=restart, maxiter=cycles
+    )
+    if info < 0:
+        raise LinearSolverError(f"GMRES breakdown (info = {info})")
+    return _finite(x), count["n"]
+
+
+def solve_direct(matrix, rhs):
+    """Solve ``matrix @ x = rhs`` with a sparse LU factorization (convenience)."""
+    return DirectLU(matrix).solve(rhs)
+
+
+def _finite(x):
     if not np.all(np.isfinite(x)):
         raise LinearSolverError("non-finite solution")
     return x

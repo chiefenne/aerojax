@@ -18,7 +18,7 @@ from aerojax.driver import IncompressibleProblem
 from aerojax.io import HistoryWriter, RunLog, write_vtu
 from aerojax.mesh import Mesh, read_su2
 from aerojax.physics import incompressible as inc
-from aerojax.solver import PseudoTimeSettings
+from aerojax.solver import LinearSettings, PseudoTimeSettings
 
 
 class Scaling(NamedTuple):
@@ -185,7 +185,8 @@ def run_case(path, console=True, mesh=None):
 
         names = ("p", "u", "v")
         history = HistoryWriter(out_dir / f"{name}.history.csv", names)
-        log.iteration_header(names)
+        implicit = cfg["solver"]["method"] == "implicit"
+        log.iteration_header(names, ("NK", "GMRES") if implicit else ())
         interval = cfg["output"]["interval"]
 
         timing = {"setup": None}
@@ -193,10 +194,15 @@ def run_case(path, console=True, mesh=None):
         def callback(it, w, residuals, cfl, accepted):
             if it == 0:
                 timing["setup"] = log.elapsed
-            log.iteration(it, residuals, cfl, accepted)
-            history.row(it, residuals, cfl, accepted, log.elapsed)
+            info = callback.info
+            nk, lin = info.get("newton_krylov", False), info.get("linear_iterations", 0)
+            extra = ("NK" if nk else "", lin if lin else "") if implicit else ()
+            log.iteration(it, residuals, cfl, accepted, extra, info.pop("note", ""))
+            history.row(it, residuals, cfl, accepted, log.elapsed, nk, lin)
             if interval and it and it % interval == 0:
                 _write_fields(out_dir / f"{name}_{it:06d}.vtu", mesh, w, scaling)
+
+        callback.info = {}
 
         solver = cfg["solver"]
         if solver["method"] == "implicit":
@@ -209,8 +215,23 @@ def run_case(path, console=True, mesh=None):
                 max_iterations=solver["max_iterations"],
                 residual_drop=solver["residual_drop"],
                 first_order_iterations=cfg["numerics"]["first_order_iterations"],
+                newton_krylov=solver["newton_krylov"]["enabled"],
+                nk_switch_residual_drop=solver["newton_krylov"][
+                    "switch_at_residual_drop"
+                ],
+                nk_linear_tolerance=solver["newton_krylov"]["linear_tolerance"],
+                nk_restart=solver["newton_krylov"]["restart"],
+                nk_max_krylov=solver["newton_krylov"]["max_iterations"],
+                linear=LinearSettings(**solver["linear_solver"]),
             )
-            result = problem.solve(w0, settings, callback=callback)
+            freeze = cfg["numerics"]["limiter_freeze"]
+            result = problem.solve(
+                w0,
+                settings,
+                callback=callback,
+                freeze_limiter_after_iterations=freeze["after_iterations"],
+                freeze_limiter_after_residual_drop=freeze["after_residual_drop"],
+            )
         else:
             result = problem.solve_explicit(
                 w0,
@@ -225,10 +246,11 @@ def run_case(path, console=True, mesh=None):
         _write_fields(out_dir / f"{name}.vtu", mesh, result.u, scaling)
         h = result.history
         log.section("Summary")
+        nk_steps = int(np.count_nonzero(h["newton_krylov"]))
         log.table(
             [
                 ("converged", "yes" if result.converged else "NO"),
-                ("iterations", str(int(h["iteration"][-1]))),
+                ("iterations", f"{int(h['iteration'][-1])} ({nk_steps} Newton-Krylov)"),
                 ("rejected updates", str(int(np.count_nonzero(~h["accepted"])))),
                 ("residual drop", f"{h['residual'][-1] / h['residual'][0]:.2e}"),
                 ("setup and compilation", f"{timing['setup']:.1f} s"),

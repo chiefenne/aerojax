@@ -318,8 +318,23 @@ def boundary_convective_flux(model, bc, normal, w_in, beta2):
     )
 
 
+def _limiter(model, geom, w, w_b, grad):
+    if model.limiter == "venkatakrishnan-wang":
+        return venkatakrishnan_wang(geom, w, w_b, grad, model.limiter_threshold)
+    if model.limiter == "none":
+        return jnp.ones_like(w)
+    raise ValueError(f"unknown limiter '{model.limiter}'")
+
+
+@partial(jax.jit, static_argnums=0)
+def limiter(model, geom, bc, w):
+    """Limiter values psi of the current state, shape (n_cells, 3)."""
+    w_b = boundary_state(bc, geom.b_normal, w[geom.b_owner])
+    return _limiter(model, geom, w, w_b, lsq_gradient(geom, w, w_b))
+
+
 @partial(jax.jit, static_argnums=(0, 4))
-def residual(model, geom, bc, w, order, beta2):
+def residual(model, geom, bc, w, order, beta2, psi=None):
     """Residual R(V), shape (n_cells, 3): net outflow minus body force.
 
     Parameters
@@ -332,16 +347,14 @@ def residual(model, geom, bc, w, order, beta2):
         Spatial order of the convective states (1 or 2); static.
     beta2 : float
         Artificial compressibility beta^2 (frozen for the evaluation).
+    psi : jax array, shape (n_cells, 3), optional
+        Frozen limiter values (D23); default: computed from ``w``.
     """
     w_b = boundary_state(bc, geom.b_normal, w[geom.b_owner])
     grad = lsq_gradient(geom, w, w_b)
     if order == 2:
-        if model.limiter == "venkatakrishnan-wang":
-            psi = venkatakrishnan_wang(geom, w, w_b, grad, model.limiter_threshold)
-        elif model.limiter == "none":
-            psi = jnp.ones_like(w)
-        else:
-            raise ValueError(f"unknown limiter '{model.limiter}'")
+        if psi is None:
+            psi = _limiter(model, geom, w, w_b, grad)
         w_l, w_r, w_in = reconstruct(geom, w, grad, psi)
     else:
         w_l, w_r, w_in = w[geom.f_owner], w[geom.f_neigh], w[geom.b_owner]
@@ -360,6 +373,16 @@ def residual(model, geom, bc, w, order, beta2):
         cell, p0 = model.pin
         r = r.at[cell, P].set(w[cell, P] - p0)
     return r
+
+
+@partial(jax.jit, static_argnums=(0, 5))
+def residual_jvp(model, geom, bc, w, dw, order, beta2, psi=None):
+    """Exact Jacobian-vector product dR/dw(w) @ dw by forward-mode AD (D25)."""
+
+    def f(x):
+        return residual(model, geom, bc, x, order, beta2, psi)
+
+    return jax.jvp(f, (w,), (dw,))[1]
 
 
 def interior_flux(model, beta2, w_o, w_n, normal, delta):

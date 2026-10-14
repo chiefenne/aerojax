@@ -57,13 +57,10 @@ def test_unknown_section_and_boundary_type():
 
 
 def test_planned_keys_are_named():
-    msg = problems({**MINIMAL, "solver": {"newton_krylov": {"enabled": True}}})
-    assert "planned for stage 3" in msg
-    raw = {
-        **MINIMAL,
-        "boundary": {**MINIMAL["boundary"], "top": {"type": "transpiration-wall"}},
-    }
-    assert "planned for stage 3" in problems(raw)
+    msg = problems({**MINIMAL, "time": {"scheme": "bdf2"}})
+    assert "planned for stage 4" in msg
+    raw = {**MINIMAL, "physics": {"model": "laminar", "turbulence": "sa-neg"}}
+    assert "planned for stage 5" in problems(raw)
 
 
 def test_required_and_types():

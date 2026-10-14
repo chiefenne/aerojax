@@ -2,13 +2,24 @@
 
 Each iteration solves
 
-    (T(u, CFL) + J1(u)) du = -R(u),
+    (T(u, CFL) + J(u)) du = -R(u),
 
-with the approximate Jacobian J1 and the pseudo-time matrix T. For a scalar
-equation T = diag(lambda_i / CFL) with the spectral radius lambda_i of cell i
-(the pseudo-time step is dtau_i = CFL A_i / lambda_i); for the preconditioned
-flow equations T holds the blocks Gamma_i lambda_i / CFL. The CFL number
-follows switched evolution relaxation (Mulder & van Leer 1985):
+with the pseudo-time matrix T and a Jacobian J. For a scalar equation
+T = diag(lambda_i / CFL) with the spectral radius lambda_i of cell i (the
+pseudo-time step is dtau_i = CFL A_i / lambda_i); for the preconditioned flow
+equations T holds the blocks Gamma_i lambda_i / CFL.
+
+Two phases (D25, as SU2's ``NEWTON_KRYLOV``):
+
+1. Start-up with the approximate first-order Jacobian J1, solved by the
+   sparse linear solver (direct LU or GMRES-ILU).
+2. Newton-Krylov once the residual has dropped by ``nk_switch_residual_drop``
+   orders: the exact Jacobian of the full residual is applied matrix-free
+   through ``jvp`` (JAX forward mode), solved by GMRES with the factorization
+   of T + J1 as preconditioner.
+
+The CFL number follows switched evolution relaxation (Mulder & van Leer
+1985):
 
     CFL_n = min(CFL_max, CFL_(n-1) * max(|R_(n-1)| / |R_n|, growth_factor)),
 
@@ -25,7 +36,12 @@ from typing import NamedTuple
 
 import numpy as np
 
-from aerojax.solver.linear import LinearSolverError, solve_direct
+from aerojax.solver.linear import (
+    LinearSettings,
+    LinearSolverError,
+    factorize,
+    solve_matrix_free,
+)
 
 
 @dataclass(frozen=True)
@@ -54,6 +70,18 @@ class PseudoTimeSettings:
         ``residual`` (D36).
     growth_factor : float
         Minimum CFL growth per accepted iteration with decreasing residual.
+    newton_krylov : bool
+        Switch to Newton-Krylov (needs ``jvp``).
+    nk_switch_residual_drop : float
+        Residual drop (orders of magnitude) at which the switch happens.
+    nk_linear_tolerance : float
+        Relative tolerance of the GMRES solve in the Newton-Krylov phase.
+    nk_restart : int
+        GMRES restart length in the Newton-Krylov phase.
+    nk_max_krylov : int
+        Maximum GMRES iterations per Newton step.
+    linear : LinearSettings
+        Sparse linear solver of phase 1 and preconditioner of phase 2.
     """
 
     cfl_start: float = 10.0
@@ -65,6 +93,12 @@ class PseudoTimeSettings:
     residual_drop: float = 8.0
     first_order_iterations: int = 0
     growth_factor: float = 2.0
+    newton_krylov: bool = True
+    nk_switch_residual_drop: float = 2.0
+    nk_linear_tolerance: float = 1.0e-2
+    nk_restart: int = 50
+    nk_max_krylov: int = 200
+    linear: LinearSettings = LinearSettings()
 
 
 class SteadyResult(NamedTuple):
@@ -79,7 +113,8 @@ class SteadyResult(NamedTuple):
     history : dict of str to ndarray
         Per iteration: ``iteration``, ``residual`` (RMS norm after the
         iteration), ``residuals`` (RMS norm per variable), ``cfl``,
-        ``accepted``.
+        ``accepted``, ``newton_krylov`` (phase flag), ``linear_iterations``
+        (GMRES iterations of the step, 0 for a direct solve).
     """
 
     u: np.ndarray
@@ -105,6 +140,7 @@ def solve_steady(
     settings=None,
     residual_startup=None,
     callback=None,
+    jvp=None,
 ):
     """Drive ``residual(u)`` to zero by implicit pseudo-time stepping.
 
@@ -124,7 +160,11 @@ def solve_steady(
         iterations (e.g. first-order convective states).
     callback : callable, optional
         ``callback(iteration, u, residual_norms, cfl, accepted)`` after every
-        iteration (e.g. logging).
+        iteration (e.g. logging). ``callback.info`` may be set beforehand to
+        a dict that receives ``newton_krylov`` and ``linear_iterations``.
+    jvp : callable, optional
+        ``jvp(u, du) -> dR/du(u) @ du`` of the full residual; enables the
+        Newton-Krylov phase.
 
     Returns
     -------
@@ -142,6 +182,7 @@ def solve_steady(
     norm = rms(r)
     norm0 = max(norm, np.finfo(float).tiny)
     target = norm0 * 10.0 ** (-s.residual_drop)
+    nk_threshold = norm0 * 10.0 ** (-s.nk_switch_residual_drop)
     cfl = s.cfl_start
     hist = {
         "iteration": [0],
@@ -149,6 +190,8 @@ def solve_steady(
         "residuals": [rms_per_variable(r)],
         "cfl": [cfl],
         "accepted": [True],
+        "newton_krylov": [False],
+        "linear_iterations": [0],
     }
     converged = norm <= target
     if callback is not None:
@@ -156,14 +199,30 @@ def solve_steady(
     for it in range(1, s.max_iterations + 1):
         if converged or cfl < s.cfl_min:
             break
+        startup = residual_startup is not None and it <= s.first_order_iterations
         if it == s.first_order_iterations + 1 and residual_startup is not None:
             r = res(u, it)  # switch to the full residual
             norm = rms(r)
-        matrix = jacobian(u) + time_term(u, cfl)
-        accepted = False
+        use_nk = (
+            s.newton_krylov and jvp is not None and not startup and norm <= nk_threshold
+        )
+        t_matrix = time_term(u, cfl)
+        accepted, lin_its = False, 0
         try:
-            du = solve_direct(matrix, -r.ravel()).reshape(u.shape)
-            u_new = u + du
+            lin = factorize(jacobian(u) + t_matrix, s.linear)
+            if use_nk:
+                du, lin_its = solve_matrix_free(
+                    _newton_operator(t_matrix, jvp, u),
+                    -r.ravel(),
+                    lin.precondition,
+                    tolerance=s.nk_linear_tolerance,
+                    restart=s.nk_restart,
+                    max_iterations=s.nk_max_krylov,
+                )
+            else:
+                du = lin.solve(-r.ravel())
+                lin_its = lin.iterations
+            u_new = u + du.reshape(u.shape)
             r_new = res(u_new, it + 1)
             norm_new = rms(r_new)
             accepted = np.isfinite(norm_new) and norm_new <= s.reject_factor * norm
@@ -172,6 +231,8 @@ def solve_steady(
         hist["iteration"].append(it)
         hist["cfl"].append(cfl)
         hist["accepted"].append(accepted)
+        hist["newton_krylov"].append(use_nk)
+        hist["linear_iterations"].append(lin_its)
         if accepted:
             ratio = norm / max(norm_new, np.finfo(float).tiny)
             if ratio > 1.0:
@@ -184,9 +245,22 @@ def solve_steady(
         hist["residual"].append(norm)
         hist["residuals"].append(rms_per_variable(r))
         if callback is not None:
+            info = getattr(callback, "info", None)
+            if info is not None:
+                info["newton_krylov"] = use_nk
+                info["linear_iterations"] = lin_its
             callback(it, u, hist["residuals"][-1], hist["cfl"][-1], accepted)
     history = {k: np.asarray(v) for k, v in hist.items()}
     return SteadyResult(u, bool(converged), history)
+
+
+def _newton_operator(t_matrix, jvp, u):
+    """Return v -> (T + J(u)) v for the matrix-free Newton-Krylov solve."""
+
+    def apply(v):
+        return t_matrix @ v + np.asarray(jvp(u, v.reshape(u.shape))).ravel()
+
+    return apply
 
 
 def solve_explicit(
@@ -232,6 +306,8 @@ def solve_explicit(
         "residuals": [rms_per_variable(r)],
         "cfl": [cfl],
         "accepted": [True],
+        "newton_krylov": [False],
+        "linear_iterations": [0],
     }
     converged = norm <= target
     if callback is not None:
@@ -254,6 +330,8 @@ def solve_explicit(
         hist["residuals"].append(rms_per_variable(r))
         hist["cfl"].append(cfl)
         hist["accepted"].append(True)
+        hist["newton_krylov"].append(False)
+        hist["linear_iterations"].append(0)
         if callback is not None:
             callback(it, u, hist["residuals"][-1], cfl, True)
     history = {k: np.asarray(v) for k, v in hist.items()}

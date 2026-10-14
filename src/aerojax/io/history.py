@@ -24,11 +24,13 @@ class HistoryWriter:
                 *(f"residual_{n}" for n in residual_names),
                 "cfl",
                 "accepted",
+                "newton_krylov",
+                "linear_iterations",
                 "time_s",
             ]
         )
 
-    def row(self, it, residuals, cfl, accepted, elapsed):
+    def row(self, it, residuals, cfl, accepted, elapsed, newton_krylov=False, linear=0):
         """Write one row."""
         self._writer.writerow(
             [
@@ -36,6 +38,8 @@ class HistoryWriter:
                 *(f"{r:.6e}" for r in residuals),
                 f"{cfl:.6e}",
                 int(accepted),
+                int(newton_krylov),
+                int(linear),
                 f"{elapsed:.3f}",
             ]
         )

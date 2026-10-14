@@ -124,12 +124,33 @@ class IncompressibleProblem:
         """Artificial compressibility beta^2 for the current state."""
         return inc.beta_squared(self.model, w, self.bc)
 
-    def residual(self, w, beta2, order=None):
-        """R(w) for the current beta^2 and spatial order."""
+    def residual(self, w, beta2, order=None, psi=None):
+        """R(w) for the current beta^2, spatial order and frozen limiter."""
         order = self.model.spatial_order if order is None else order
         return np.asarray(
-            inc.residual(self.model, self.geom, self.bc, jnp.asarray(w), order, beta2)
+            inc.residual(
+                self.model, self.geom, self.bc, jnp.asarray(w), order, beta2, psi
+            )
         )
+
+    def jvp(self, w, dw, beta2, psi=None):
+        """Exact dR/dw @ dw of the second-order residual (``jax.jvp``)."""
+        return np.asarray(
+            inc.residual_jvp(
+                self.model,
+                self.geom,
+                self.bc,
+                jnp.asarray(w),
+                jnp.asarray(dw),
+                self.model.spatial_order,
+                beta2,
+                psi,
+            )
+        )
+
+    def limiter(self, w):
+        """Limiter values of the state ``w``, shape (n_cells, 3)."""
+        return inc.limiter(self.model, self.geom, self.bc, jnp.asarray(w))
 
     def jacobian(self, w, beta2):
         """First-order Jacobian, with the pinned row replaced if any."""
@@ -167,22 +188,55 @@ class IncompressibleProblem:
         w[:, inc.V] = velocity[1]
         return w
 
-    def solve(self, w0=None, settings=None, callback=None):
+    def solve(
+        self,
+        w0=None,
+        settings=None,
+        callback=None,
+        freeze_limiter_after_iterations=None,
+        freeze_limiter_after_residual_drop=None,
+    ):
         """Implicit pseudo-time solution (D25, D35).
 
         beta^2 is updated from the current state before every residual
-        evaluation, as in SU2.
+        evaluation, as in SU2. The limiter is frozen (D23) once either freeze
+        condition is met; afterwards the residual, its Jacobian-vector
+        products and the solution use the limiter values of that state.
         """
         w0 = self.initial_state() if w0 is None else w0
-        state = {"beta2": self.beta2(w0)}
+        state = {"beta2": self.beta2(w0), "psi": None, "norm0": None}
+        uses_limiter = self.model.limiter != "none" and self.model.spatial_order == 2
 
         def residual(w):
             state["beta2"] = self.beta2(w)
-            return self.residual(w, state["beta2"])
+            return self.residual(w, state["beta2"], psi=state["psi"])
 
         def residual_startup(w):
             state["beta2"] = self.beta2(w)
             return self.residual(w, state["beta2"], order=1)
+
+        def on_iteration(it, w, residuals, cfl, accepted):
+            norm = float(np.sqrt(np.mean(np.square(residuals))))
+            if state["norm0"] is None:
+                state["norm0"] = max(norm, np.finfo(float).tiny)
+            if uses_limiter and state["psi"] is None and accepted:
+                drop = np.log10(state["norm0"] / max(norm, np.finfo(float).tiny))
+                if (
+                    freeze_limiter_after_iterations is not None
+                    and it >= freeze_limiter_after_iterations
+                ) or (
+                    freeze_limiter_after_residual_drop is not None
+                    and drop >= freeze_limiter_after_residual_drop
+                ):
+                    state["psi"] = self.limiter(w)
+                    if callback is not None and hasattr(callback, "info"):
+                        callback.info["note"] = "limiter frozen"
+            if callback is not None:
+                callback(it, w, residuals, cfl, accepted)
+
+        on_iteration.info = getattr(callback, "info", {})
+        if callback is not None and not hasattr(callback, "info"):
+            callback.info = on_iteration.info
 
         return solve_steady(
             residual,
@@ -191,7 +245,8 @@ class IncompressibleProblem:
             w0,
             settings or PseudoTimeSettings(),
             residual_startup=residual_startup,
-            callback=callback,
+            callback=on_iteration,
+            jvp=lambda w, dw: self.jvp(w, dw, state["beta2"], state["psi"]),
         )
 
     def solve_explicit(

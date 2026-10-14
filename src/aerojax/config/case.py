@@ -72,12 +72,13 @@ class Resolved:
         return "\n".join(lines)
 
     def _table_lines(self, prefix, options, values):
+        """Write scalar keys first, then the sub-tables.
+
+        TOML attaches keys to the most recent table header.
+        """
         lines = []
         for key, opt in options.items():
             if isinstance(opt, dict):
-                lines.append("")
-                lines.append(f"[{prefix}.{key}]")
-                lines += self._table_lines(f"{prefix}.{key}", opt, values[key])
                 continue
             value = values.get(key)
             if value is None:
@@ -87,6 +88,11 @@ class Resolved:
             lines.append(
                 f"{key} = {_toml_value(value)}  # {opt.description}{unit} ({origin})"
             )
+        for key, opt in options.items():
+            if isinstance(opt, dict):
+                sub = self._table_lines(f"{prefix}.{key}", opt, values[key])
+                if sub:
+                    lines += ["", f"[{prefix}.{key}]", *sub]
         return lines
 
 

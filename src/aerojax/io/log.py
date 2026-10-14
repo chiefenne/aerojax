@@ -67,21 +67,28 @@ class RunLog:
         for key, value in rows:
             self.write(" " * indent + f"{key:<{width}}  {value}")
 
-    def iteration_header(self, residual_names):
-        """Write the column header of the iteration lines."""
-        self._columns = list(residual_names)
-        cols = "".join(f"{'log(R_' + n + ')':>12}" for n in self._columns)
-        self.write("")
-        self.write(f"{'iter':>6}{cols}{'CFL':>10}{'time[s]':>10}  note")
+    def iteration_header(self, residual_names, extra=()):
+        """Write the column header of the iteration lines.
 
-    def iteration(self, it, residuals, cfl, accepted=True, note=""):
+        ``extra`` names additional short columns (e.g. the Newton-Krylov
+        phase flag and the GMRES iteration count).
+        """
+        self._columns = list(residual_names)
+        self._extra = tuple(extra)
+        cols = "".join(f"{'log(R_' + n + ')':>12}" for n in self._columns)
+        more = "".join(f"{e:>7}" for e in self._extra)
+        self.write("")
+        self.write(f"{'iter':>6}{cols}{'CFL':>10}{more}{'time[s]':>10}  note")
+
+    def iteration(self, it, residuals, cfl, accepted=True, extra=(), note=""):
         """Write one iteration line."""
         with np.errstate(divide="ignore"):
             logs = np.log10(np.asarray(residuals, dtype=float))
         cols = "".join(f"{v:>12.4f}" for v in logs)
+        more = "".join(f"{str(e):>7}" for e in extra)
         elapsed = time.perf_counter() - self._t0
         flag = note if accepted else ("rejected " + note).strip()
-        self.write(f"{it:>6d}{cols}{cfl:>10.2e}{elapsed:>10.1f}  {flag}".rstrip())
+        self.write(f"{it:>6d}{cols}{cfl:>10.2e}{more}{elapsed:>10.1f}  {flag}".rstrip())
 
     @property
     def elapsed(self):
