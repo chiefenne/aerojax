@@ -17,6 +17,7 @@ from aerojax.config import Resolved, load_case
 from aerojax.driver import IncompressibleProblem
 from aerojax.io import HistoryWriter, RunLog, write_vtu
 from aerojax.mesh import Mesh, read_su2
+from aerojax.physics import forces as fz
 from aerojax.physics import incompressible as inc
 from aerojax.solver import LinearSettings, PseudoTimeSettings
 
@@ -52,6 +53,8 @@ class RunResult(NamedTuple):
     converged : bool
     history : dict
     output_dir : Path
+    coefficients : Coefficients or None
+        Final force coefficients over ``output.force_boundaries``.
     """
 
     config: Resolved
@@ -60,6 +63,7 @@ class RunResult(NamedTuple):
     converged: bool
     history: dict
     output_dir: Path
+    coefficients: object = None
 
 
 def setup(config, mesh=None):
@@ -113,6 +117,11 @@ def setup(config, mesh=None):
             entry["velocity"] = tuple(v / scaling.velocity for v in b["velocity"])
         elif kind == "pressure-outlet":
             entry["pressure"] = b["pressure"] / scaling.pressure
+        elif kind == "total-pressure-inlet":
+            entry["total_pressure"] = b["total_pressure"] / scaling.pressure
+            entry["flow_direction"] = tuple(b["flow_direction"])
+        elif kind == "transpiration-wall":
+            entry["normal_velocity"] = b["normal_velocity"] / scaling.velocity
         conditions[name] = entry
 
     num = cfg["numerics"]
@@ -184,9 +193,15 @@ def run_case(path, console=True, mesh=None):
         _log_setup(log, config, problem, scaling, mesh)
 
         names = ("p", "u", "v")
-        history = HistoryWriter(out_dir / f"{name}.history.csv", names)
         implicit = cfg["solver"]["method"] == "implicit"
-        log.iteration_header(names, ("NK", "GMRES") if implicit else ())
+        force_boundaries = cfg["output"]["force_boundaries"]
+        monitor = Monitor(config, problem, scaling) if force_boundaries else None
+        coeff_names = ("CL", "CD", "CM") if monitor else ()
+        history = HistoryWriter(out_dir / f"{name}.history.csv", names, coeff_names)
+        extra_names = (("NK", "GMRES") if implicit else ()) + tuple(
+            (c, 11) for c in coeff_names
+        )
+        log.iteration_header(names, extra_names)
         interval = cfg["output"]["interval"]
 
         timing = {"setup": None}
@@ -197,8 +212,10 @@ def run_case(path, console=True, mesh=None):
             info = callback.info
             nk, lin = info.get("newton_krylov", False), info.get("linear_iterations", 0)
             extra = ("NK" if nk else "", lin if lin else "") if implicit else ()
+            coeffs = monitor.coefficients(w) if monitor else ()
+            extra += tuple(f"{c:.5f}" for c in coeffs)
             log.iteration(it, residuals, cfl, accepted, extra, info.pop("note", ""))
-            history.row(it, residuals, cfl, accepted, log.elapsed, nk, lin)
+            history.row(it, residuals, cfl, accepted, log.elapsed, nk, lin, coeffs)
             if interval and it and it % interval == 0:
                 _write_fields(out_dir / f"{name}_{it:06d}.vtu", mesh, w, scaling)
 
@@ -247,19 +264,88 @@ def run_case(path, console=True, mesh=None):
         h = result.history
         log.section("Summary")
         nk_steps = int(np.count_nonzero(h["newton_krylov"]))
-        log.table(
-            [
-                ("converged", "yes" if result.converged else "NO"),
-                ("iterations", f"{int(h['iteration'][-1])} ({nk_steps} Newton-Krylov)"),
-                ("rejected updates", str(int(np.count_nonzero(~h["accepted"])))),
-                ("residual drop", f"{h['residual'][-1] / h['residual'][0]:.2e}"),
-                ("setup and compilation", f"{timing['setup']:.1f} s"),
-                ("wall time", f"{log.elapsed:.1f} s"),
-                ("fields", str(out_dir / f"{name}.vtu")),
-                ("history", str(history.path)),
+        rows = [
+            ("converged", "yes" if result.converged else "NO"),
+            ("iterations", f"{int(h['iteration'][-1])} ({nk_steps} Newton-Krylov)"),
+            ("rejected updates", str(int(np.count_nonzero(~h["accepted"])))),
+            ("residual drop", f"{h['residual'][-1] / h['residual'][0]:.2e}"),
+            ("setup and compilation", f"{timing['setup']:.1f} s"),
+            ("wall time", f"{log.elapsed:.1f} s"),
+            ("fields", str(out_dir / f"{name}.vtu")),
+            ("history", str(history.path)),
+        ]
+        coefficients = None
+        if monitor:
+            coefficients = monitor.final(result.u)
+            c = coefficients
+            rows[4:4] = [
+                ("force boundaries", ", ".join(force_boundaries)),
+                ("CL, CD, CM", f"{c.cl:.6f}, {c.cd:.6f}, {c.cm:.6f}"),
+                ("CD pressure, viscous", f"{c.cd_pressure:.6f}, {c.cd_viscous:.6f}"),
+                ("Cx, Cy", f"{c.cx:.6f}, {c.cy:.6f}"),
             ]
+            for bname in force_boundaries:
+                path = out_dir / f"{name}.wall_{bname}.csv"
+                monitor.write_wall(result.u, bname, path)
+                rows.append((f"wall '{bname}'", str(path)))
+        log.table(rows)
+    return RunResult(
+        config, mesh, w, result.converged, result.history, out_dir, coefficients
+    )
+
+
+class Monitor:
+    """Force coefficients of the non-dimensional solution (D45).
+
+    With rho_ref = U_ref = L_ref = 1 internally, q = rho_nd / 2 with the
+    non-dimensional reference density and the reference length is 1.
+    """
+
+    def __init__(self, config, problem, scaling):
+        cfg = config.data
+        self.problem = problem
+        self.scaling = scaling
+        self.boundaries = cfg["output"]["force_boundaries"]
+        self.q = 0.5 * cfg["reference"]["density"] / scaling.density
+        self.alpha = cfg["reference"]["angle_of_attack"]
+        self.moment_center = tuple(
+            c / scaling.length for c in cfg["reference"]["moment_center"]
         )
-    return RunResult(config, mesh, w, result.converged, result.history, out_dir)
+        farfields = [n for n, b in cfg["boundary"].items() if b["type"] == "farfield"]
+        self.p_ref = (
+            cfg["boundary"][farfields[0]]["pressure"] / scaling.pressure
+            if len(farfields) == 1
+            else 0.0
+        )
+
+    def coefficients(self, w):
+        """(CL, CD, CM) of the state ``w``."""
+        c = self.final(w)
+        return (c.cl, c.cd, c.cm)
+
+    def final(self, w):
+        """Full :class:`~aerojax.physics.forces.Coefficients`."""
+        f = self.problem.forces(w, self.boundaries, self.moment_center)
+        return fz.coefficients(f, self.q, 1.0, self.alpha)
+
+    def write_wall(self, w, boundary, path):
+        """Write x, y, p, Cp, tau_x, tau_y, Cf of one boundary (SI units)."""
+        loads = self.problem.wall_loads(w)
+        faces = self.problem.boundary_faces([boundary])
+        d = fz.wall_distribution(loads, self.problem.geom, faces, self.q, self.p_ref)
+        s = self.scaling
+        columns = {
+            "x": d["x"] * s.length,
+            "y": d["y"] * s.length,
+            "p": d["p"] * s.pressure,
+            "cp": d["cp"],
+            "tau_x": d["tau_x"] * s.pressure,
+            "tau_y": d["tau_y"] * s.pressure,
+            "cf": d["cf"],
+        }
+        header = ",".join(columns)
+        rows = np.column_stack(list(columns.values()))
+        np.savetxt(path, rows, delimiter=",", header=header, comments="", fmt="%.10e")
 
 
 def _scaled_mesh(mesh, factor):

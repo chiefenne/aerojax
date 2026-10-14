@@ -70,13 +70,14 @@ class RunLog:
     def iteration_header(self, residual_names, extra=()):
         """Write the column header of the iteration lines.
 
-        ``extra`` names additional short columns (e.g. the Newton-Krylov
-        phase flag and the GMRES iteration count).
+        ``extra`` names additional columns, each a name or a ``(name, width)``
+        pair (default width 7), e.g. the Newton-Krylov phase flag, the GMRES
+        iteration count and force coefficients.
         """
         self._columns = list(residual_names)
-        self._extra = tuple(extra)
+        self._extra = [e if isinstance(e, tuple) else (e, 7) for e in extra]
         cols = "".join(f"{'log(R_' + n + ')':>12}" for n in self._columns)
-        more = "".join(f"{e:>7}" for e in self._extra)
+        more = "".join(f"{name:>{width}}" for name, width in self._extra)
         self.write("")
         self.write(f"{'iter':>6}{cols}{'CFL':>10}{more}{'time[s]':>10}  note")
 
@@ -85,7 +86,8 @@ class RunLog:
         with np.errstate(divide="ignore"):
             logs = np.log10(np.asarray(residuals, dtype=float))
         cols = "".join(f"{v:>12.4f}" for v in logs)
-        more = "".join(f"{str(e):>7}" for e in extra)
+        widths = [w for _, w in self._extra] + [7] * len(extra)
+        more = "".join(f"{str(e):>{w}}" for e, w in zip(extra, widths, strict=False))
         elapsed = time.perf_counter() - self._t0
         flag = note if accepted else ("rejected " + note).strip()
         self.write(f"{it:>6d}{cols}{cfl:>10.2e}{more}{elapsed:>10.1f}  {flag}".rstrip())

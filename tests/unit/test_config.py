@@ -105,6 +105,38 @@ def test_farfield_supplies_reference_and_initial_state():
     assert not any("pinned" in n for n in cfg.notices)
 
 
+def test_force_boundaries_and_reference_defaults():
+    cfg = resolve(MINIMAL)
+    assert cfg["output"]["force_boundaries"] == ["bottom", "top"]
+    assert cfg["reference"]["moment_center"] == [0.25, 0.0]
+    assert cfg["reference"]["angle_of_attack"] == 0.0
+    raw = {**MINIMAL, "output": {"force_boundaries": ["left"]}}
+    assert "is not a wall" in problems(raw)
+    raw = {**MINIMAL, "output": {"force_boundaries": ["botom"]}}
+    assert "did you mean 'bottom'" in problems(raw)
+
+
+def test_new_boundary_types():
+    raw = {
+        **MINIMAL,
+        "boundary": {
+            "bottom": {"type": "transpiration-wall", "normal_velocity": 0.1},
+            "top": {"type": "wall"},
+            "left": {
+                "type": "total-pressure-inlet",
+                "total_pressure": 10.0,
+                "flow_direction": [1.0, 0.0],
+            },
+            "right": {"type": "pressure-outlet"},
+        },
+    }
+    cfg = resolve(raw)
+    assert cfg["boundary"]["right"]["pressure"] == 0.0
+    assert not any("pinned" in n for n in cfg.notices)
+    raw["boundary"]["left"] = {"type": "total-pressure-inlet"}
+    assert "total_pressure is required" in problems(raw)
+
+
 def test_load_case_reports_toml_syntax_errors(tmp_path):
     path = tmp_path / "bad.toml"
     path.write_text("[mesh\nfile = 'x'\n")

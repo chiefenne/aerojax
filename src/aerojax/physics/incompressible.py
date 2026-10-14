@@ -46,14 +46,18 @@ from aerojax.numerics import (
 from aerojax.solver import divergence
 
 # Boundary-condition kinds (integer codes per boundary face).
-WALL, SYMMETRY, VELOCITY_INLET, PRESSURE_OUTLET, FARFIELD = range(5)
+WALL, SYMMETRY, VELOCITY_INLET, PRESSURE_OUTLET, FARFIELD, TOTAL_PRESSURE_INLET = range(
+    6
+)
 KIND_NAMES = {
     "wall": WALL,
+    "transpiration-wall": WALL,  # wall with a prescribed normal velocity
     "symmetry": SYMMETRY,
     "slip-wall": SYMMETRY,
     "velocity-inlet": VELOCITY_INLET,
     "pressure-outlet": PRESSURE_OUTLET,
     "farfield": FARFIELD,
+    "total-pressure-inlet": TOTAL_PRESSURE_INLET,
 }
 P, U, V = 0, 1, 2
 
@@ -98,23 +102,31 @@ class IncompressibleModel(NamedTuple):
     pin: tuple = None
 
 
+def _density(bc):
+    return bc.density
+
+
 class BoundaryData(NamedTuple):
     """Per-boundary-face condition (a JAX pytree).
 
     Attributes
     ----------
     kind : int array, shape (n_bfaces,)
-        One of WALL, SYMMETRY, VELOCITY_INLET, PRESSURE_OUTLET, FARFIELD.
+        One of WALL, SYMMETRY, VELOCITY_INLET, PRESSURE_OUTLET, FARFIELD,
+        TOTAL_PRESSURE_INLET.
     value : float array, shape (n_bfaces, 3)
         Prescribed (p, u, v) where the kind uses them: wall and velocity
-        inlet use (u, v); pressure outlet uses p; farfield uses all three.
+        inlet use (u, v); pressure outlet uses p; farfield uses all three;
+        total-pressure inlet stores (p_total, d_x, d_y) with the unit flow
+        direction d.
     """
 
     kind: jnp.ndarray
     value: jnp.ndarray
+    density: float = 1.0
 
 
-def boundary_data(disc, conditions):
+def boundary_data(disc, conditions, density=1.0):
     """Build :class:`BoundaryData` from a dict of boundary conditions.
 
     Parameters
@@ -123,8 +135,11 @@ def boundary_data(disc, conditions):
     conditions : dict of str to dict
         ``{name: {"type": ..., "velocity": (u, v) or callable(x, y),
         "pressure": p or callable(x, y)}}`` for every non-periodic boundary.
-        Callables receive the boundary-face centres (arrays) and return
-        per-face values (D41).
+        A ``"transpiration-wall"`` takes ``normal_velocity`` (positive =
+        blowing into the domain, negative = suction); a
+        ``"total-pressure-inlet"`` takes ``total_pressure`` and
+        ``flow_direction``. Callables receive the boundary-face centres
+        (arrays) and return per-face values (D41).
 
     Returns
     -------
@@ -141,36 +156,53 @@ def boundary_data(disc, conditions):
             f"unknown boundaries {sorted(extra)}"
         )
     centres = np.asarray(disc.geom.b_centre)
+    normals = np.asarray(disc.geom.b_normal)
     for name, sl in disc.boundary_slices.items():
         bc = conditions[name]
         kind[sl] = KIND_NAMES[bc["type"]]
         x, y = centres[sl, 0], centres[sl, 1]
-        vel = bc.get("velocity", (0.0, 0.0))
-        if callable(vel):
-            vel = vel(x, y)
+        if bc["type"] == "transpiration-wall":
+            vn = _evaluate(bc["normal_velocity"], x, y)
+            vel = (-vn * normals[sl, 0], -vn * normals[sl, 1])  # blowing = inward
+            pres = 0.0
+        elif bc["type"] == "total-pressure-inlet":
+            d = np.asarray(_evaluate(bc["flow_direction"], x, y), dtype=float)
+            d = np.broadcast_to(
+                d.reshape(2, -1) if d.ndim > 1 else d[:, None], (2, x.size)
+            )
+            norm = np.hypot(d[0], d[1])
+            vel = (d[0] / norm, d[1] / norm)
+            pres = bc["total_pressure"]
+        else:
+            vel = bc.get("velocity", (0.0, 0.0))
+            if callable(vel):
+                vel = vel(x, y)
+            pres = bc.get("pressure", 0.0)
         value[sl, U] = np.broadcast_to(np.asarray(vel[0], dtype=float), x.shape)
         value[sl, V] = np.broadcast_to(np.asarray(vel[1], dtype=float), x.shape)
-        pres = bc.get("pressure", 0.0)
-        if callable(pres):
-            pres = pres(x, y)
-        value[sl, P] = np.broadcast_to(np.asarray(pres, dtype=float), x.shape)
-    return BoundaryData(jnp.asarray(kind), jnp.asarray(value))
+        value[sl, P] = np.broadcast_to(_evaluate(pres, x, y), x.shape)
+    return BoundaryData(jnp.asarray(kind), jnp.asarray(value), float(density))
+
+
+def _evaluate(spec, x, y):
+    """Evaluate a constant or a callable of the face centres as a float array."""
+    return np.asarray(spec(x, y) if callable(spec) else spec, dtype=float)
 
 
 def lsq_include(conditions):
     """Return the ``lsq_include`` callback for :func:`build_geometry`.
 
     A boundary face takes part in a variable's gradient only where its value
-    is known: velocity at walls and velocity inlets, pressure at pressure
-    outlets, everything at farfield and symmetry faces (symmetry values are
-    the mirrored cell values).
+    is known: velocity at walls, velocity inlets and total-pressure inlets,
+    pressure at pressure outlets, everything at farfield and symmetry faces
+    (symmetry values are the mirrored cell values).
     """
 
     def include(slices, n_bfaces):
         mask = np.ones((n_bfaces, 3), dtype=bool)
         for name, sl in slices.items():
             k = KIND_NAMES[conditions[name]["type"]]
-            if k in (WALL, VELOCITY_INLET):
+            if k in (WALL, VELOCITY_INLET, TOTAL_PRESSURE_INLET):
                 mask[sl, P] = False
             elif k == PRESSURE_OUTLET:
                 mask[sl, U] = mask[sl, V] = False
@@ -185,12 +217,22 @@ def boundary_state(bc, normal, v_in):
     Wall / inlet: prescribed velocity, interior pressure. Outlet: prescribed
     pressure, interior velocity. Farfield: prescribed state. Symmetry:
     interior pressure, interior velocity with the normal component removed.
+    Total-pressure inlet: interior pressure p, velocity magnitude from
+    p_total - p = rho |v|^2 / 2 along the prescribed direction (SU2's
+    incompressible pressure inlet).
     """
     vn = v_in[:, U] * normal[:, 0] + v_in[:, V] * normal[:, 1]
     mirrored = v_in.at[:, U].add(-vn * normal[:, 0]).at[:, V].add(-vn * normal[:, 1])
     kind = bc.kind[:, None]
     out = jnp.where(kind == SYMMETRY, mirrored, v_in)
     out = jnp.where(kind == FARFIELD, bc.value, out)
+    # Total-pressure inlet: |v| = sqrt(2 (p0 - p) / rho), floored at zero.
+    dyn = jnp.maximum(bc.value[:, P] - v_in[:, P], 0.0)
+    speed = jnp.sqrt(2.0 * dyn / _density(bc) + 1e-300)
+    inlet = (
+        v_in.at[:, U].set(speed * bc.value[:, U]).at[:, V].set(speed * bc.value[:, V])
+    )
+    out = jnp.where(kind == TOTAL_PRESSURE_INLET, inlet, out)
     prescribe_v = (kind == WALL) | (kind == VELOCITY_INLET)
     out = out.at[:, U].set(jnp.where(prescribe_v[:, 0], bc.value[:, U], out[:, U]))
     out = out.at[:, V].set(jnp.where(prescribe_v[:, 0], bc.value[:, V], out[:, V]))
@@ -402,7 +444,7 @@ def interior_flux(model, beta2, w_o, w_n, normal, delta):
 
 def boundary_flux(model, beta2, w_o, bc_kind, bc_value, normal, delta):
     """Compact first-order flux through a boundary face (for the Jacobian)."""
-    bc = BoundaryData(bc_kind[None], bc_value[None])
+    bc = BoundaryData(bc_kind[None], bc_value[None], model.density)
     conv = boundary_convective_flux(model, bc, normal[None], w_o[None], beta2)[0]
     if model.viscosity > 0.0:
         w_b = boundary_state(bc, normal[None], w_o[None])[0]

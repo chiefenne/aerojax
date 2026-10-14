@@ -76,6 +76,14 @@ def test_run_case_dimensional_couette(case_dir):
     assert resolved["fluid"]["viscosity"] == 0.3
     log = (out / "couette_test.log").read_text()
     assert "converged              yes" in log and "log(R_u)" in log
+    # Wall loads in SI: shear mu U / H = 0.3 * 3 / 0.5 = 1.8 Pa, q = 9 Pa.
+    wall = np.genfromtxt(
+        out / "couette_test.wall_bottom.csv", delimiter=",", names=True
+    )
+    np.testing.assert_allclose(wall["tau_x"], 1.8, rtol=1e-6)
+    np.testing.assert_allclose(wall["cf"], 0.2, rtol=1e-6)
+    assert result.coefficients.cd == pytest.approx(0.0, abs=1e-8)  # top + bottom cancel
+    assert "CL,CD,CM" in (out / "couette_test.history.csv").read_text().splitlines()[0]
 
 
 def test_cli_check_and_run(case_dir, capsys):

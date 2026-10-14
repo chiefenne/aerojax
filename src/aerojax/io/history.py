@@ -14,7 +14,7 @@ class HistoryWriter:
         One column ``residual_<name>`` per variable.
     """
 
-    def __init__(self, path, residual_names):
+    def __init__(self, path, residual_names, coefficient_names=()):
         self.path = Path(path)
         self._file = open(self.path, "w", newline="")
         self._writer = csv.writer(self._file)
@@ -26,11 +26,22 @@ class HistoryWriter:
                 "accepted",
                 "newton_krylov",
                 "linear_iterations",
+                *coefficient_names,
                 "time_s",
             ]
         )
 
-    def row(self, it, residuals, cfl, accepted, elapsed, newton_krylov=False, linear=0):
+    def row(
+        self,
+        it,
+        residuals,
+        cfl,
+        accepted,
+        elapsed,
+        newton_krylov=False,
+        linear=0,
+        coefficients=(),
+    ):
         """Write one row."""
         self._writer.writerow(
             [
@@ -40,6 +51,7 @@ class HistoryWriter:
                 int(accepted),
                 int(newton_krylov),
                 int(linear),
+                *(f"{c:.8e}" for c in coefficients),
                 f"{elapsed:.3f}",
             ]
         )

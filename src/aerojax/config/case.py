@@ -15,7 +15,7 @@ from aerojax.config.schema import (
     Opt,
 )
 
-PRESSURE_FIXING = {"pressure-outlet", "farfield"}
+PRESSURE_FIXING = {"pressure-outlet", "farfield", "total-pressure-inlet"}
 
 
 class ConfigError(ValueError):
@@ -298,6 +298,25 @@ def _consistency(data, explicit, problems, notices, path):
         problems.append("reference.length is required with fluid.reynolds_number")
     if ref["density"] is None:
         ref["density"] = fluid["density"]
+    if ref["angle_of_attack"] is None:
+        ref["angle_of_attack"] = (
+            boundaries[farfields[0]]["angle_of_attack"] if len(farfields) == 1 else 0.0
+        )
+    if ref["moment_center"] is None:
+        ref["moment_center"] = [0.25 * ref["length"], 0.0]
+
+    # Force boundaries: default all walls; names must exist and be walls.
+    walls = [n for n, t in types.items() if t in ("wall", "transpiration-wall")]
+    out = data["output"]
+    if out["force_boundaries"] is None:
+        out["force_boundaries"] = walls
+    for n in out["force_boundaries"]:
+        if n not in boundaries:
+            problems.append(_unknown("output.force_boundaries entry", n, boundaries))
+        elif n not in walls:
+            problems.append(
+                f"output.force_boundaries: '{n}' is not a wall (type {types[n]!r})"
+            )
 
     # Initial state: explicit values or from_boundary (default: the farfield).
     init = data["initial"]

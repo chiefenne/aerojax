@@ -75,6 +75,16 @@ SCHEMA = {
         "density": Opt(
             "float", None, "Reference density; default fluid.density", "kg/m^3"
         ),
+        "angle_of_attack": Opt(
+            "float",
+            None,
+            "Flow direction for lift and drag; default: farfield angle of attack "
+            "if exactly one farfield boundary exists, else 0",
+            "deg",
+        ),
+        "moment_center": Opt(
+            "float2", None, "Moment reference point; default (0.25 length, 0)", "m"
+        ),
         "pressure_point": Opt(
             "float2",
             None,
@@ -227,6 +237,12 @@ SCHEMA = {
             "int", 0, "Write fields every n iterations; 0 = only at the end", minimum=0
         ),
         "history": Opt("bool", True, "Write the convergence history (CSV and .log)"),
+        "force_boundaries": Opt(
+            "string_list",
+            None,
+            "Boundaries over which forces and moments are integrated; "
+            "default: all walls",
+        ),
         "verbosity": Opt(
             "string", "normal", "Log detail", choices=("normal", "detailed")
         ),
@@ -245,6 +261,21 @@ BOUNDARY_TYPES = {
     },
     "pressure-outlet": {
         "pressure": Opt("float", 0.0, "Static gauge pressure", "Pa"),
+    },
+    "total-pressure-inlet": {
+        "total_pressure": Opt("float", REQUIRED, "Total gauge pressure", "Pa"),
+        "flow_direction": Opt(
+            "float2", REQUIRED, "Flow direction (d_x, d_y), normalised internally"
+        ),
+    },
+    "transpiration-wall": {
+        "normal_velocity": Opt(
+            "float",
+            REQUIRED,
+            "Velocity normal to the wall: positive = blowing into the domain, "
+            "negative = suction",
+            "m/s",
+        ),
     },
     "farfield": {
         "velocity": Opt("float", REQUIRED, "Freestream velocity magnitude", "m/s"),
@@ -270,13 +301,7 @@ PLANNED = {
     "time.end_time": "stage 4 (unsteady)",
     "time.inner_iterations": "stage 4 (unsteady)",
     "time.inner_residual_drop": "stage 4 (unsteady)",
-    "output.force_boundaries": "stage 3",
     "initial.restart": "later",
     "initial.turbulence": "stage 5 (RANS)",
-    "reference.moment_center": "stage 3",
-    "reference.angle_of_attack": "stage 3",
 }
-PLANNED_BOUNDARY_TYPES = {
-    "total-pressure-inlet": "stage 3",
-    "transpiration-wall": "stage 3",
-}
+PLANNED_BOUNDARY_TYPES = {}

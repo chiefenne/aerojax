@@ -11,6 +11,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from aerojax.numerics import build_geometry
+from aerojax.physics import forces as fz
 from aerojax.physics import incompressible as inc
 from aerojax.solver import (
     PseudoTimeSettings,
@@ -21,7 +22,7 @@ from aerojax.solver import (
     solve_steady,
 )
 
-PRESSURE_FIXING = {"pressure-outlet", "farfield"}
+PRESSURE_FIXING = {"pressure-outlet", "farfield", "total-pressure-inlet"}
 
 
 class IncompressibleProblem:
@@ -80,7 +81,7 @@ class IncompressibleProblem:
             mesh, weight_exponent, periodic, inc.lsq_include(regular)
         )
         self.geom = self.disc.geom
-        self.bc = inc.boundary_data(self.disc, regular)
+        self.bc = inc.boundary_data(self.disc, regular, model.density)
         self.conditions = regular
         self.periodic = periodic
         self.check_mass_balance()
@@ -178,6 +179,40 @@ class IncompressibleProblem:
             inc.explicit_update(
                 self.model, self.geom, jnp.asarray(w), jnp.asarray(r), beta2, cfl
             )
+        )
+
+    # -- loads --------------------------------------------------------------
+
+    def wall_loads(self, w):
+        """Pressure and viscous traction on every boundary face."""
+        return fz.wall_loads(self.model, self.geom, self.bc, jnp.asarray(w))
+
+    def boundary_faces(self, names):
+        """Boundary-face indices (``b_*`` order) of the named boundaries."""
+        idx = [
+            np.arange(
+                self.disc.boundary_slices[n].start, self.disc.boundary_slices[n].stop
+            )
+            for n in names
+        ]
+        return np.concatenate(idx) if idx else np.zeros(0, dtype=np.int64)
+
+    def forces(self, w, boundaries=None, moment_center=(0.0, 0.0), loads=None):
+        """Integrated force and moment on the given boundaries (default: all walls).
+
+        Returns
+        -------
+        aerojax.physics.forces.Forces
+        """
+        if boundaries is None:
+            boundaries = [
+                n
+                for n, bc in self.conditions.items()
+                if bc["type"] in ("wall", "transpiration-wall")
+            ]
+        loads = self.wall_loads(w) if loads is None else loads
+        return fz.integrate(
+            loads, self.geom, self.boundary_faces(boundaries), moment_center
         )
 
     def initial_state(self, velocity=(0.0, 0.0), pressure=0.0):
