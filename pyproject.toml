@@ -28,6 +28,9 @@ Repository = "https://github.com/chiefenne/aerojax"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+aerojax = ["cases/data/*.csv"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = ["slow: long-running benchmark cases (run with: pytest -m slow)"]

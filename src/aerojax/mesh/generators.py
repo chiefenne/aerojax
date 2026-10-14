@@ -22,6 +22,7 @@ def rectangle(
     cell_type="quad",
     diagonal="alternating",
     quad_layers=None,
+    cluster_x="none",
     cluster_y="none",
     beta=2.0,
     perturb=0.0,
@@ -50,6 +51,8 @@ def rectangle(
     quad_layers : int, optional
         Rows of quadrilaterals at each wall for "mixed"; default ``ny // 4``
         (at least 1).
+    cluster_x : {"none", "left", "right", "both"}
+        Clustering of grid lines towards the given side(s), tanh distribution.
     cluster_y : {"none", "bottom", "top", "both"}
         Clustering of grid lines towards the given wall(s), tanh distribution.
     beta : float
@@ -74,7 +77,12 @@ def rectangle(
         raise ValueError("nx and ny must be >= 1")
     rng = np.random.default_rng(seed)
 
-    xs = x[0] + (x[1] - x[0]) * np.linspace(0.0, 1.0, nx + 1)
+    cx = {"none": "none", "left": "bottom", "right": "top", "both": "both"}
+    if cluster_x not in cx:
+        raise ValueError("cluster_x must be 'none', 'left', 'right' or 'both'")
+    xs = x[0] + (x[1] - x[0]) * _cluster(
+        np.linspace(0.0, 1.0, nx + 1), cx[cluster_x], beta
+    )
     ys = y[0] + (y[1] - y[0]) * _cluster(np.linspace(0.0, 1.0, ny + 1), cluster_y, beta)
     nodes = _grid_nodes(xs, ys, perturb, rng)
     edges = _rectangle_boundary_edges(nx, ny)

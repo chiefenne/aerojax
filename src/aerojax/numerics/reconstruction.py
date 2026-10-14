@@ -57,17 +57,19 @@ def venkatakrishnan_wang(geom, u, u_b, grad, threshold=0.05):
     all_values = jnp.concatenate((u, u_b))
     eps2 = (threshold * (all_values.max(axis=0) - all_values.min(axis=0))) ** 2
 
-    def face_limiter(cells, centres):
-        d2 = jnp.einsum("fvk,fk->fv", grad[cells], centres - geom.centroid[cells])
+    def face_limiter(cells, dx):
+        d2 = jnp.einsum("fvk,fk->fv", grad[cells], dx)
         d1 = jnp.where(d2 > 0.0, u_max[cells] - u[cells], u_min[cells] - u[cells])
         num = d1**2 + eps2 + 2.0 * d1 * d2
         den = d1**2 + 2.0 * d2**2 + d1 * d2 + eps2
         return jnp.where(den > 0.0, num / jnp.where(den > 0.0, den, 1.0), 1.0)
 
     psi = jnp.ones_like(u)
-    psi = jnp.minimum(psi, jax.ops.segment_min(face_limiter(o, geom.f_centre), o, n))
-    psi = jnp.minimum(psi, jax.ops.segment_min(face_limiter(nb, geom.f_centre), nb, n))
-    psi = jnp.minimum(psi, jax.ops.segment_min(face_limiter(b, geom.b_centre), b, n))
+    psi = jnp.minimum(psi, jax.ops.segment_min(face_limiter(o, geom.f_dx_owner), o, n))
+    psi = jnp.minimum(
+        psi, jax.ops.segment_min(face_limiter(nb, geom.f_dx_neigh), nb, n)
+    )
+    psi = jnp.minimum(psi, jax.ops.segment_min(face_limiter(b, geom.b_delta), b, n))
     return jnp.clip(psi, 0.0, 1.0)
 
 
@@ -91,12 +93,11 @@ def reconstruct(geom, u, grad, psi):
         Interior-side state at boundary faces.
     """
 
-    def extrapolate(cells, centres):
-        dx = centres - geom.centroid[cells]
+    def extrapolate(cells, dx):
         return u[cells] + psi[cells] * jnp.einsum("fvk,fk->fv", grad[cells], dx)
 
     return (
-        extrapolate(geom.f_owner, geom.f_centre),
-        extrapolate(geom.f_neigh, geom.f_centre),
-        extrapolate(geom.b_owner, geom.b_centre),
+        extrapolate(geom.f_owner, geom.f_dx_owner),
+        extrapolate(geom.f_neigh, geom.f_dx_neigh),
+        extrapolate(geom.b_owner, geom.b_delta),
     )

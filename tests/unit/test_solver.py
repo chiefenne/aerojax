@@ -15,9 +15,9 @@ from aerojax.solver import (
 )
 
 
-def nonlinear_interior_flux(u_o, u_n, normal, delta):
+def nonlinear_interior_flux(params, u_o, u_n, normal, delta):
     """Two coupled variables, nonlinear in both states."""
-    s = u_o + u_n
+    s = u_o + u_n + params
     return jnp.array(
         [
             normal[0] * s[0] ** 2 + normal[1] * s[0] * s[1],
@@ -26,7 +26,7 @@ def nonlinear_interior_flux(u_o, u_n, normal, delta):
     )
 
 
-def nonlinear_boundary_flux(u_o, u_b, normal, delta):
+def nonlinear_boundary_flux(params, u_o, u_b, normal, delta):
     return jnp.array(
         [u_o[0] * u_o[1] * normal[0], jnp.exp(u_o[1] - u_b[1]) * normal[1]]
     )
@@ -39,18 +39,20 @@ def test_jacobian_matches_dense_ad():
     u = jnp.asarray(rng.uniform(-1.0, 1.0, (mesh.n_cells, 2)))
     u_b = jnp.asarray(rng.uniform(-1.0, 1.0, (geom.b_owner.size, 2)))
 
+    params = jnp.array(0.3)
+
     def r1(u):
-        f = jax.vmap(nonlinear_interior_flux)(
-            u[geom.f_owner], u[geom.f_neigh], geom.f_normal, geom.f_delta
+        f = jax.vmap(nonlinear_interior_flux, in_axes=(None, 0, 0, 0, 0))(
+            params, u[geom.f_owner], u[geom.f_neigh], geom.f_normal, geom.f_delta
         )
-        b = jax.vmap(nonlinear_boundary_flux)(
-            u[geom.b_owner], u_b, geom.b_normal, geom.b_delta
+        b = jax.vmap(nonlinear_boundary_flux, in_axes=(None, 0, 0, 0, 0))(
+            params, u[geom.b_owner], u_b, geom.b_normal, geom.b_delta
         )
         return divergence(geom, f, b)
 
     dense = jax.jit(jax.jacfwd(lambda x: r1(x.reshape(u.shape)).ravel()))(u.ravel())
     sparse = first_order_jacobian(
-        geom, nonlinear_interior_flux, nonlinear_boundary_flux, u, u_b
+        geom, nonlinear_interior_flux, nonlinear_boundary_flux, u, params, (u_b,)
     )
     np.testing.assert_allclose(sparse.toarray(), np.asarray(dense), atol=1e-13)
 
@@ -68,15 +70,15 @@ def scalar_problem(u0):
     """R(u) = sqrt(u) - 1 per cell; Newton from u0 = 9 jumps to u < 0."""
     residual = lambda u: np.sqrt(u) - 1.0  # noqa: E731  (NaN for u < 0)
     jacobian = lambda u: sp.diags(0.5 / np.sqrt(u.ravel()))  # noqa: E731
-    radius = lambda u: np.ones(u.shape[0])  # noqa: E731
-    return residual, jacobian, radius, np.full((3, 1), u0)
+    time_term = lambda u, cfl: sp.diags(np.ones(u.size) / cfl)  # noqa: E731
+    return residual, jacobian, time_term, np.full((3, 1), u0)
 
 
 def test_rejected_update_cuts_cfl_and_recovers():
-    residual, jacobian, radius, u0 = scalar_problem(9.0)
+    residual, jacobian, time_term, u0 = scalar_problem(9.0)
     settings = PseudoTimeSettings(cfl_start=1.0e8, residual_drop=12.0)
     with np.errstate(invalid="ignore"):
-        result = solve_steady(residual, jacobian, radius, u0, settings)
+        result = solve_steady(residual, jacobian, time_term, u0, settings)
     h = result.history
     assert result.converged
     np.testing.assert_allclose(result.u, 1.0, rtol=1e-12)
@@ -85,8 +87,8 @@ def test_rejected_update_cuts_cfl_and_recovers():
 
 
 def test_ser_raises_cfl_while_residual_falls():
-    residual, jacobian, radius, u0 = scalar_problem(1.5)
-    result = solve_steady(residual, jacobian, radius, u0, PseudoTimeSettings())
+    residual, jacobian, time_term, u0 = scalar_problem(1.5)
+    result = solve_steady(residual, jacobian, time_term, u0, PseudoTimeSettings())
     h = result.history
     assert result.converged and np.all(h["accepted"])
     assert np.all(np.diff(h["residual"]) < 0.0)

@@ -97,10 +97,11 @@ def residual(model, geom, u, u_b):
     return divergence(geom, convective + diffusive, b_flux)
 
 
-def interior_flux(model, u_o, u_n, normal, delta):
+def interior_flux(model, params, u_o, u_n, normal, delta):
     """Compact first-order flux through an interior face (for the Jacobian).
 
     Upwind convection and the two-point part of the face-gradient scheme.
+    ``params`` is unused (the model has no per-iteration parameters).
     """
     an = jnp.dot(jnp.asarray(model.velocity), normal)
     dn = jnp.dot(delta, normal)
@@ -111,7 +112,7 @@ def interior_flux(model, u_o, u_n, normal, delta):
     return an * jnp.where(an >= 0.0, u_o, u_n) - model.diffusivity * coeff * (u_n - u_o)
 
 
-def boundary_flux(model, u_o, u_b, normal, delta):
+def boundary_flux(model, params, u_o, u_b, normal, delta):
     """Compact first-order flux through a Dirichlet boundary face."""
     an = jnp.dot(jnp.asarray(model.velocity), normal)
     dn = jnp.dot(delta, normal)

@@ -10,6 +10,7 @@ from typing import NamedTuple
 
 import jax.numpy as jnp
 import numpy as np
+import scipy.sparse as sp
 
 from aerojax.mesh import rectangle
 from aerojax.numerics import build_geometry
@@ -74,8 +75,10 @@ def solve(model, cell_type, n, perturb=0.0, seed=5, settings=None):
     lam = cd.spectral_radius(model, geom)
     result = solve_steady(
         residual=lambda u: cd.residual(model, geom, jnp.asarray(u), u_b),
-        jacobian=lambda u: first_order_jacobian(geom, fi, fb, jnp.asarray(u), u_b),
-        spectral_radius=lambda u: lam,
+        jacobian=lambda u: first_order_jacobian(
+            geom, fi, fb, jnp.asarray(u), b_args=(u_b,)
+        ),
+        time_term=lambda u, cfl: sp.diags(lam / cfl),
         u0=np.zeros((mesh.n_cells, 1)),
         settings=settings or PseudoTimeSettings(residual_drop=11.0),
     )
