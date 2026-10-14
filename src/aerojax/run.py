@@ -361,15 +361,22 @@ def _run_steady(log, config, problem, scaling, w0, mesh, out_dir):
     callback.info = {}
 
     solver = cfg["solver"]
+    vortex = None
     if solver["method"] == "implicit":
         settings = _pseudo_time_settings(cfg)
         freeze = cfg["numerics"]["limiter_freeze"]
+        if cfg["reference"]["vortex_correction"]:
+            vortex = problem.farfield_vortex(
+                tuple(c / scaling.length for c in cfg["reference"]["moment_center"]),
+                force_boundaries,
+            )
         result = problem.solve(
             w0,
             settings,
             callback=callback,
             freeze_limiter_after_iterations=freeze["after_iterations"],
             freeze_limiter_after_residual_drop=freeze["after_residual_drop"],
+            vortex=vortex,
         )
     else:
         result = problem.solve_explicit(
@@ -399,18 +406,30 @@ def _run_steady(log, config, problem, scaling, w0, mesh, out_dir):
     if monitor:
         coefficients = monitor.final(result.u)
         c = coefficients
-        rows[4:4] = [
-            ("force boundaries", ", ".join(force_boundaries)),
-            ("CL, CD, CM", f"{c.cl:.6f}, {c.cd:.6f}, {c.cm:.6f}"),
-            ("CD pressure, viscous", f"{c.cd_pressure:.6f}, {c.cd_viscous:.6f}"),
-            ("Cx, Cy", f"{c.cx:.6f}, {c.cy:.6f}"),
-        ]
+        rows[4:4] = (
+            [
+                ("force boundaries", ", ".join(force_boundaries)),
+                ("CL, CD, CM", f"{c.cl:.6f}, {c.cd:.6f}, {c.cm:.6f}"),
+            ]
+            + _vortex_rows(vortex, scaling)
+            + [
+                ("CD pressure, viscous", f"{c.cd_pressure:.6f}, {c.cd_viscous:.6f}"),
+                ("Cx, Cy", f"{c.cx:.6f}, {c.cy:.6f}"),
+            ]
+        )
         for bname in force_boundaries:
             path = out_dir / f"{name}.wall_{bname}.csv"
             monitor.write_wall(result.u, bname, path)
             rows.append((f"wall '{bname}'", str(path)))
     log.table(rows)
     return result, coefficients
+
+
+def _vortex_rows(vortex, scaling):
+    if vortex is None:
+        return []
+    gamma = vortex.gamma * scaling.velocity * scaling.length
+    return [("farfield vortex", f"circulation {gamma:.6g} m^2/s")]
 
 
 def _run_unsteady(log, config, problem, scaling, w0, mesh, out_dir):

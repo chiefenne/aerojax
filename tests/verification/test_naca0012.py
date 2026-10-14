@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from aerojax.cases import naca0012
-from aerojax.mesh import airfoil_points, naca0012_ogrid
+from aerojax.mesh import airfoil_ogrid, airfoil_points, naca0012_ogrid
 from aerojax.mesh import naca0012 as thickness
 
 
@@ -47,3 +47,48 @@ def test_naca0012_medium(alpha):
         {0.0: 0.0069, 10.0: 0.0062, 15.0: 0.0051}[alpha], rel=0.1
     )
     assert ref["cd"] < r.cd < 1.6 * ref["cd"]
+
+
+def euler_lift(mesh, vortex, alpha=10.0):
+    from aerojax.driver import IncompressibleProblem
+    from aerojax.physics import forces as fz
+    from aerojax.physics import incompressible as inc
+    from aerojax.solver import PseudoTimeSettings
+
+    a = np.radians(alpha)
+    conditions = {
+        "airfoil": {"type": "slip-wall"},
+        "farfield": {"type": "farfield", "velocity": (np.cos(a), np.sin(a))},
+    }
+    model = inc.IncompressibleModel(density=1.0, viscosity=0.0)
+    problem = IncompressibleProblem(mesh, model, conditions)
+    v = problem.farfield_vortex((0.25, 0.0), ["airfoil"]) if vortex else None
+    r = problem.solve(
+        problem.initial_state((np.cos(a), np.sin(a))),
+        PseudoTimeSettings(residual_drop=5.0, max_iterations=150),
+        vortex=v,
+    )
+    assert r.converged
+    return fz.coefficients(
+        problem.forces(r.u, ["airfoil"], (0.25, 0.0)), 0.5, 1.0, alpha
+    ).cl
+
+
+def test_vortex_correction_recovers_far_farfield_lift():
+    """Euler at 10 deg: a 10-chord farfield with the point-vortex correction
+    (P10) gives the lift of a 500-chord farfield within 2 %."""
+    near = airfoil_ogrid(
+        airfoil_points(96), 32, first_spacing=2e-3, farfield_radius=10.0
+    )
+    far = airfoil_ogrid(
+        airfoil_points(96),
+        48,
+        first_spacing=2e-3,
+        farfield_radius=500.0,
+        max_growth=1.35,
+    )
+    cl_far = euler_lift(far, False)
+    cl_near = euler_lift(near, False)
+    cl_corrected = euler_lift(near, True)
+    assert abs(cl_corrected - cl_far) < abs(cl_near - cl_far)
+    assert cl_corrected == pytest.approx(cl_far, rel=0.02)

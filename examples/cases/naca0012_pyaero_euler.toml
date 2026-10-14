@@ -1,0 +1,65 @@
+# NACA 0012 on a PyAero mesh (examples/meshes/naca0012_pyaero_50k.su2,
+# C-type, 52k cells, farfield 3.5 chords ahead and 8 chords downstream),
+# inviscid flow at alpha = 10 deg with the point-vortex farfield correction.
+# PyAero's boundary names (inlet = C-arc, outlet, top, bottom) all get the
+# farfield type; identical values count as one freestream.
+# The wall spacing of this mesh (first cell 4e-3 chords) suits laminar flow
+# up to Re ~ 1e4; a RANS case at Re 6e6 needs about 5e-6 chords (y+ = 1).
+
+[case]
+name = "naca0012_pyaero_euler"
+
+[mesh]
+file = "../meshes/naca0012_pyaero_50k.su2"   # boundary faces: airfoil, inlet, outlet, top, bottom
+
+[physics]
+model = "euler"
+
+[fluid]
+density = 1.0                     # kg/m^3
+
+[reference]
+velocity = 1.0                    # m/s
+length = 1.0                      # m, chord
+moment_center = [0.25, 0.0]       # m, quarter chord: also the vortex location
+vortex_correction = true          # farfield at 3.5 chords: freestream + lift-induced velocity
+
+[initial]
+from_boundary = "inlet"
+
+[boundary.airfoil]
+type = "slip-wall"
+
+[boundary.inlet]
+type = "farfield"
+velocity = 1.0                    # m/s
+angle_of_attack = 10.0            # deg
+pressure = 0.0                    # Pa
+
+[boundary.outlet]
+type = "farfield"
+velocity = 1.0
+angle_of_attack = 10.0
+pressure = 0.0
+
+[boundary.top]
+type = "farfield"
+velocity = 1.0
+angle_of_attack = 10.0
+pressure = 0.0
+
+[boundary.bottom]
+type = "farfield"
+velocity = 1.0
+angle_of_attack = 10.0
+pressure = 0.0
+
+[numerics]
+limiter_freeze = { after_residual_drop = 2.0 }
+
+[solver]
+residual_drop = 6.0
+
+[output]
+directory = "output/naca0012_pyaero_euler"
+force_boundaries = ["airfoil"]

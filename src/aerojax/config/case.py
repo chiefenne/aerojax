@@ -368,6 +368,9 @@ def _consistency(data, explicit, problems, notices, path):
                     f"{dotted}.turbulence ignored: physics.model is not rans"
                 )
 
+    if ref["vortex_correction"] and not farfields:
+        problems.append("reference.vortex_correction needs a farfield boundary")
+
     # Unsteady runs need the time step and the final time.
     tm = data["time"]
     if tm["mode"] == "unsteady":

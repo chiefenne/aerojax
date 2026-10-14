@@ -19,8 +19,16 @@
   viscous drag close to TMR, pressure drag too high on the coarse O-grid
   wake (see docs/requirements.md D40). PyAero meshes (boundary faces
   `airfoil`, `farfield`) can be used directly.
-- Examples: `examples/stage6_naca0012.py`, TOML case
-  `examples/cases/naca0012_rans.toml`.
+- Point-vortex farfield correction (P10, `reference.vortex_correction`):
+  freestream plus the lift-induced velocity of a vortex at the moment
+  centre, pressure from Bernoulli; removes the farfield error of the lift on
+  a 10-chord domain (Euler, 10°). Several farfield boundaries with the same
+  freestream count as one (PyAero's inlet/outlet/top/bottom).
+- PyAero mesh of the NACA 0012 (`examples/meshes/naca0012_pyaero_50k.su2`,
+  C-type, 52k cells) read and run as is; its wall spacing suits laminar
+  flow (y⁺ ≈ 900 at Re 6e6, see docs/requirements.md).
+- Examples: `examples/stage6_naca0012.py`, TOML cases
+  `examples/cases/naca0012_rans.toml` and `naca0012_pyaero_euler.toml`.
 
 ## 0.5 – Stage 5: RANS with the SA-neg model (2026-10-14)
 

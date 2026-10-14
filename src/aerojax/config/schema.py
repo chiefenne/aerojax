@@ -122,6 +122,13 @@ SCHEMA = {
         "moment_center": Opt(
             "float2", None, "Moment reference point; default (0.25 length, 0)", "m"
         ),
+        "vortex_correction": Opt(
+            "bool",
+            False,
+            "Point-vortex farfield correction: freestream plus the velocity "
+            "induced by the lift on output.force_boundaries, vortex at "
+            "moment_center (for farfields closer than ~500 chords)",
+        ),
         "pressure_point": Opt(
             "float2",
             None,

@@ -29,6 +29,34 @@ PRESSURE_FIXING = {"pressure-outlet", "farfield", "total-pressure-inlet"}
 INFLOW_TYPES = {"velocity-inlet", "total-pressure-inlet", "farfield"}
 
 
+class FarfieldVortex:
+    """State of the point-vortex farfield correction (P10).
+
+    Attributes
+    ----------
+    faces : ndarray
+        Boundary-face indices of the farfield faces.
+    base : ndarray, shape (n, 3)
+        Freestream (p, u, v) of these faces.
+    offset : ndarray, shape (n, 2)
+        Face centre minus vortex centre.
+    boundaries : list of str
+        Boundaries whose lift sets the circulation.
+    relaxation : float
+        Under-relaxation of the circulation update per iteration.
+    gamma : float
+        Current circulation.
+    """
+
+    def __init__(self, faces, base, offset, boundaries, relaxation):
+        self.faces = faces
+        self.base = base
+        self.offset = offset
+        self.boundaries = boundaries
+        self.relaxation = relaxation
+        self.gamma = 0.0
+
+
 class IncompressibleProblem:
     """An incompressible flow case on a mesh.
 
@@ -318,6 +346,56 @@ class IncompressibleProblem:
             loads, self.geom, self.boundary_faces(boundaries), moment_center
         )
 
+    # -- farfield point-vortex correction (P10) --------------------------------
+
+    def farfield_vortex(self, centre, boundaries=None, relaxation=0.5):
+        """Return a :class:`FarfieldVortex` for this problem.
+
+        The farfield state becomes freestream plus the velocity induced by a
+        point vortex at ``centre`` whose circulation follows from the lift on
+        ``boundaries`` (Kutta-Joukowski, Gamma = L / (rho U)), with the
+        pressure from Bernoulli. NASA TMR recommends it for farfields closer
+        than about 500 chords.
+        """
+        faces = self.boundary_faces(
+            [n for n, bc in self.conditions.items() if bc["type"] == "farfield"]
+        )
+        if faces.size == 0:
+            raise ValueError("the vortex correction needs a farfield boundary")
+        if boundaries is None:
+            boundaries = [
+                n
+                for n, bc in self.conditions.items()
+                if bc["type"] in ("wall", "transpiration-wall")
+            ]
+        return FarfieldVortex(
+            faces,
+            np.asarray(self.bc.value)[faces].copy(),
+            np.asarray(self.geom.b_centre)[faces] - np.asarray(centre, dtype=float),
+            list(boundaries),
+            float(relaxation),
+        )
+
+    def apply_farfield_vortex(self, vortex, w):
+        """Update the farfield values from the current lift (one relaxed step)."""
+        base = vortex.base
+        u_inf = base[:, 1:3]
+        speed = np.hypot(u_inf[:, 0], u_inf[:, 1]).mean()
+        f = self.forces(w, vortex.boundaries)
+        direction = u_inf.mean(axis=0) / max(speed, 1e-300)
+        lift = -f.fx * direction[1] + f.fy * direction[0]
+        gamma = lift / (self.model.density * speed)
+        vortex.gamma += vortex.relaxation * (gamma - vortex.gamma)
+        r = vortex.offset
+        r2 = np.sum(r**2, axis=1)
+        coeff = vortex.gamma / (2.0 * np.pi * r2)
+        vel = u_inf + coeff[:, None] * np.column_stack((r[:, 1], -r[:, 0]))
+        p = base[:, 0] + 0.5 * self.model.density * (speed**2 - np.sum(vel**2, axis=1))
+        value = np.asarray(self.bc.value).copy()
+        value[vortex.faces, 0] = p
+        value[vortex.faces, 1:3] = vel
+        self.bc = self.bc._replace(value=jnp.asarray(value))
+
     def initial_state(self, velocity=(0.0, 0.0), pressure=0.0, nu_tilde=None):
         """Uniform initial field, shape (n_cells, n_var); nu_tilde default 3 nu."""
         w = np.zeros((self.mesh.n_cells, self.model.n_var))
@@ -336,6 +414,7 @@ class IncompressibleProblem:
         callback=None,
         freeze_limiter_after_iterations=None,
         freeze_limiter_after_residual_drop=None,
+        vortex=None,
     ):
         """Implicit pseudo-time solution (D25, D35).
 
@@ -343,6 +422,8 @@ class IncompressibleProblem:
         evaluation, as in SU2. The limiter is frozen (D23) once either freeze
         condition is met; afterwards the residual, its Jacobian-vector
         products and the solution use the limiter values of that state.
+        With ``vortex`` (:meth:`farfield_vortex`) the farfield values are
+        updated from the lift after every accepted iteration (P10).
         """
         w0 = self.initial_state() if w0 is None else w0
         state = {"beta2": self.beta2(w0), "psi": None, "norm0": None}
@@ -357,6 +438,8 @@ class IncompressibleProblem:
             return self.residual(w, state["beta2"], order=1)
 
         def on_iteration(it, w, residuals, cfl, accepted):
+            if vortex is not None and accepted:
+                self.apply_farfield_vortex(vortex, w)
             norm = float(np.sqrt(np.mean(np.square(residuals))))
             if state["norm0"] is None:
                 state["norm0"] = max(norm, np.finfo(float).tiny)

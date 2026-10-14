@@ -109,7 +109,7 @@ Status: 2026-10-13, requirements complete (steps 1–13). Implementation follows
 | P7 | Spatial profiles and time dependence of boundary values | E.g. parabolic inlet profile, values from a CSV table, pulsed blowing |
 | P8 | Further boundary-condition types | E.g. mass-flow inlet and outlet |
 | P9 | Bulk-velocity (mass-flow) control for periodic channels | Pressure gradient adjusted iteratively to a target bulk velocity (D39 R4) |
-| P10 | Point-vortex farfield correction | For lifting airfoils on meshes with a near farfield; NASA TMR recommends it unless the farfield is ~500 chords away. Stage 6: the generated O-grid puts the farfield at 500 chords, so the correction stays open (needed for PyAero meshes with a near farfield) |
+| P10 | Point-vortex farfield correction | **Implemented in stage 6** (`reference.vortex_correction`, `IncompressibleProblem.farfield_vortex`): incompressible form, vortex at the moment centre, circulation from the lift (Kutta–Joukowski) with under-relaxation, pressure from Bernoulli. Euler at 10°: on a 10-chord O-grid the lift error vs 500 chords drops from −1.0 % to +0.1 %; on PyAero's C-mesh (farfield 3.5 chords ahead, outlet 8 chords) from −6.4 % to −2.9 % (1.079 → 1.119 vs 1.153 unlimited) — at that distance the single vortex is not sufficient, a farfield of 20–50 chords with the correction is recommended |
 | P11 | Turbulent channel vs DNS | Lee & Moser 2015 (Re_τ 180–5200), SA validation for internal flow |
 | P12 | Method of manufactured solutions | Needs a source-term hook; for SA see Eça et al. 2006 |
 | P13 | Multigrid preconditioner (e.g. agglomeration multigrid) | If GMRES-ILU is not robust enough on 200k–500k-cell meshes (D52) |
@@ -138,6 +138,17 @@ Notes from implementation:
   exclude the outlet corner. The cell next to the corner takes its pressure
   from the outlet face and its velocity from the wall face in the
   least-squares stencil.
+- Stage 6, PyAero mesh (`examples/meshes/naca0012_pyaero_50k.su2`, C-type,
+  52k cells, boundaries airfoil/inlet/outlet/top/bottom): read and run
+  without changes (PyAero's names are mapped to types in the case file,
+  identical farfield boundaries count as one freestream). Its wall spacing
+  (first cell 4·10⁻³ chords) gives y⁺ ≈ 900 at Re 6·10⁶ — the mesh suits
+  wall-resolved laminar flow up to Re ≈ 10⁴; the TMR RANS comparison needs a
+  first cell of about 5·10⁻⁶ chords (y⁺ = 1 / (Re √(C_f/2)) with C_f ≈ 0.003)
+  with 60–80 layers at growth ≈ 1.15. The refined wake block is aligned with
+  the chord; at 10° the wake leaves it after one to two chords, which is
+  acceptable (the wake is thin only near the trailing edge); a farfield of
+  20–50 chords with the vortex correction is preferable to 3.5 chords.
 - Stage 6: on the airfoil O-grid the approximate-Jacobian iteration stalls
   one to two orders below the start (first-order Jacobian vs second-order
   residual) and the Newton–Krylov switch needs the iteration criterion
