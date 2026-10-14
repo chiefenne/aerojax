@@ -105,6 +105,26 @@ def test_farfield_supplies_reference_and_initial_state():
     assert not any("pinned" in n for n in cfg.notices)
 
 
+def test_several_identical_farfields_count_as_one():
+    far = {"type": "farfield", "velocity": 10.0, "angle_of_attack": 4.0}
+    raw = {
+        **MINIMAL,
+        "reference": {},
+        "initial": {},
+        "boundary": {
+            "bottom": {"type": "wall"},
+            **{n: dict(far) for n in ("inlet", "outlet", "top")},
+        },
+    }
+    cfg = resolve(raw)
+    assert cfg["reference"]["velocity"] == 10.0
+    assert cfg["reference"]["angle_of_attack"] == 4.0
+    assert cfg["initial"]["from_boundary"] == "inlet"
+    raw["boundary"]["top"]["velocity"] = 12.0
+    with pytest.raises(Exception, match=r"\[initial\] is required"):
+        resolve(raw)
+
+
 def test_force_boundaries_and_reference_defaults():
     cfg = resolve(MINIMAL)
     assert cfg["output"]["force_boundaries"] == ["bottom", "top"]

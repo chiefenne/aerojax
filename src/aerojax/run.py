@@ -539,12 +539,10 @@ class Monitor:
         self.moment_center = tuple(
             c / scaling.length for c in cfg["reference"]["moment_center"]
         )
-        farfields = [n for n, b in cfg["boundary"].items() if b["type"] == "farfield"]
-        self.p_ref = (
-            cfg["boundary"][farfields[0]]["pressure"] / scaling.pressure
-            if len(farfields) == 1
-            else 0.0
-        )
+        pressures = {
+            b["pressure"] for b in cfg["boundary"].values() if b["type"] == "farfield"
+        }
+        self.p_ref = pressures.pop() / scaling.pressure if len(pressures) == 1 else 0.0
 
     def coefficients(self, w):
         """(CL, CD, CM) of the state ``w``."""

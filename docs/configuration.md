@@ -242,7 +242,7 @@ dependence: P7). Types marked "inflow" take a `turbulence` table
 | `"wall"` | No-slip wall. Optional `velocity = [u, v]` for a moving wall (e.g. cavity lid) |
 | `"slip-wall"` | Identical to `"symmetry"`: zero normal velocity, no shear stress |
 | `"symmetry"` | Symmetry plane: zero normal velocity, no shear stress |
-| `"farfield"` | `velocity` (magnitude, m/s), `angle_of_attack` (deg, default 0), `pressure` (Pa, default 0); inflow: `turbulence` |
+| `"farfield"` | `velocity` (magnitude, m/s), `angle_of_attack` (deg, default 0), `pressure` (Pa, default 0); inflow: `turbulence`. Several farfield boundaries with the same values (e.g. PyAero's `inlet`, `outlet`, `top`, `bottom`) count as one freestream for the defaults of `reference.velocity`, `reference.angle_of_attack`, `initial.from_boundary` and the Cp reference pressure |
 | `"velocity-inlet"` | `velocity = [u, v]` in m/s; inflow: `turbulence` |
 | `"total-pressure-inlet"` | `total_pressure` (Pa, gauge), `flow_direction = [d_x, d_y]` (normalised internally); the velocity magnitude follows from p_total − p = ½ρ|v|² with the interior pressure; inflow: `turbulence` |
 | `"pressure-outlet"` | `pressure` (Pa, default 0) |

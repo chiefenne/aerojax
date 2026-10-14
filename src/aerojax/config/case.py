@@ -301,6 +301,19 @@ def _consistency(data, explicit, problems, notices, path):
     boundaries = data["boundary"]
     types = {name: b["type"] for name, b in boundaries.items()}
     farfields = [n for n, t in types.items() if t == "farfield"]
+    # Several farfield boundaries with the same freestream (e.g. PyAero's
+    # inlet/outlet/top/bottom) count as one for the defaults below.
+    streams = {
+        (
+            boundaries[n].get("velocity"),
+            boundaries[n].get("angle_of_attack"),
+            boundaries[n].get("pressure"),
+            repr(boundaries[n].get("turbulence")),
+        )
+        for n in farfields
+    }
+    if len(streams) == 1:
+        farfields = farfields[:1]
 
     # Periodic pairs: partner exists and has no own condition.
     for name, b in boundaries.items():
