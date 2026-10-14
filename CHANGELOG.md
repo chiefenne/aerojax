@@ -1,6 +1,28 @@
 # Changelog
 
-## 0.3 – Stage 3: Newton–Krylov, boundary conditions, Euler and benchmark cases (not yet tagged)
+## 0.4 – Stage 4: unsteady flow (not yet tagged)
+
+- Dual time stepping (D9, D37): BDF2 (BDF1 for the first step, or
+  throughout) with the steady solver as inner iteration — extrapolated start
+  2uⁿ − uⁿ⁻¹, large starting pseudo-CFL, Newton–Krylov from the first inner
+  iteration, inner residual drop relative to R*(uⁿ). 1–2 inner iterations per
+  step in smooth flow. `IncompressibleProblem.solve_unsteady`,
+  `aerojax.solver.solve_unsteady`, `DualTimeSettings`.
+- Case file: `[time] mode = "unsteady"`, `scheme`, `time_step`, `end_time`,
+  `inner_iterations`, `inner_residual_drop`, `inner_cfl`.
+- Output (D45): unsteady log and history layouts (one line per time step with
+  inner iterations and drop; inner lines with `verbosity = "detailed"`), field
+  series `<name>_<step>.vtu` collected in a `.pvd` file.
+- Verification: V3 Taylor–Green vortex (doubly periodic, exact pressure pin):
+  observed temporal orders 2.02/2.08 (BDF2) and 0.99/1.00 (BDF1), velocity
+  error 0.5 % on 32²; impulsively started Couette flow vs the series solution
+  from TOML. Benchmark B2 DFG 2D-2 (Re 100): periodic shedding with St
+  0.278, cD,max 3.20, cL,max 1.06, Δp 2.44 on 4.4k cells (reference 0.295–0.305,
+  3.22–3.24, 0.99–1.01, 2.46–2.50).
+- Examples: `examples/stage4_unsteady.py`, TOML case
+  `examples/cases/couette_unsteady.toml`.
+
+## 0.3 – Stage 3: Newton–Krylov, boundary conditions, Euler and benchmark cases (2026-10-14)
 
 - Newton–Krylov phase (D25): once the residual has dropped by
   `switch_at_residual_drop` orders, each iteration solves the exact

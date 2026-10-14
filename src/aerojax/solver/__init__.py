@@ -1,5 +1,11 @@
-"""Residual assembly, Jacobian, linear solvers and pseudo-time stepping."""
+"""Residual assembly, Jacobian, linear solvers, pseudo-time and dual time stepping."""
 
+from aerojax.solver.dual_time import (
+    DualTimeSettings,
+    UnsteadyResult,
+    bdf_coefficients,
+    solve_unsteady,
+)
 from aerojax.solver.jacobian import block_diagonal, first_order_jacobian, replace_rows
 from aerojax.solver.linear import (
     LinearSettings,
@@ -19,10 +25,13 @@ from aerojax.solver.pseudo_time import (
 from aerojax.solver.residual import divergence
 
 __all__ = [
+    "DualTimeSettings",
     "LinearSettings",
     "LinearSolverError",
     "PseudoTimeSettings",
     "SteadyResult",
+    "UnsteadyResult",
+    "bdf_coefficients",
     "block_diagonal",
     "divergence",
     "factorize",
@@ -34,4 +43,5 @@ __all__ = [
     "solve_explicit",
     "solve_matrix_free",
     "solve_steady",
+    "solve_unsteady",
 ]

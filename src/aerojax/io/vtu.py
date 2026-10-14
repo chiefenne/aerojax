@@ -107,3 +107,26 @@ def write_vtu(path, mesh, cell_data=None, point_data=None, binary=True):
     )
     path.write_text(xml)
     return path
+
+
+def write_pvd(path, entries):
+    """Write a ParaView data collection (.pvd) of a time series (D45).
+
+    Parameters
+    ----------
+    path : str or Path
+    entries : sequence of (float, str)
+        ``(time, file)`` pairs; ``file`` is relative to the directory of the
+        .pvd file.
+    """
+    lines = [
+        '<?xml version="1.0"?>',
+        '<VTKFile type="Collection" version="0.1" byte_order="LittleEndian">',
+        "  <Collection>",
+    ]
+    lines += [
+        f'    <DataSet timestep="{t!r}" group="" part="0" file="{f}"/>'
+        for t, f in entries
+    ]
+    lines += ["  </Collection>", "</VTKFile>", ""]
+    Path(path).write_text("\n".join(lines))

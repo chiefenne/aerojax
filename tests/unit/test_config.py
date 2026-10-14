@@ -57,8 +57,8 @@ def test_unknown_section_and_boundary_type():
 
 
 def test_planned_keys_are_named():
-    msg = problems({**MINIMAL, "time": {"scheme": "bdf2"}})
-    assert "planned for stage 4" in msg
+    msg = problems({**MINIMAL, "initial": {"velocity": [0.0, 0.0], "restart": "x"}})
+    assert "planned for later" in msg
     raw = {**MINIMAL, "physics": {"model": "laminar", "turbulence": "sa-neg"}}
     assert "planned for stage 5" in problems(raw)
 
@@ -119,6 +119,16 @@ def test_force_boundaries_and_reference_defaults():
     assert resolve(raw)["output"]["force_boundaries"] == ["bottom"]
     raw = {**raw, "physics": {"model": "euler"}}
     assert resolve(raw)["output"]["force_boundaries"] == ["bottom", "top"]
+
+
+def test_unsteady_time_keys():
+    raw = {**MINIMAL, "time": {"mode": "unsteady", "time_step": 0.01}}
+    assert "time.end_time is required" in problems(raw)
+    raw = {**MINIMAL, "time": {"mode": "unsteady", "time_step": 0.01, "end_time": 1.0}}
+    cfg = resolve(raw)
+    assert cfg["time"]["scheme"] == "bdf2" and cfg["time"]["inner_cfl"] == 1.0e4
+    raw = {**MINIMAL, "time": {"time_step": 0.01}}
+    assert any("ignored in steady mode" in n for n in resolve(raw).notices)
 
 
 def test_new_boundary_types():

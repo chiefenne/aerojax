@@ -232,7 +232,31 @@ SCHEMA = {
         },
     },
     "time": {
-        "mode": Opt("string", "steady", "Time mode", choices=("steady",)),
+        "mode": Opt("string", "steady", "Time mode", choices=("steady", "unsteady")),
+        "scheme": Opt(
+            "string",
+            "bdf2",
+            "Physical time discretisation (the first step uses BDF1)",
+            choices=("bdf2", "bdf1"),
+        ),
+        "time_step": Opt("float", None, "Physical time step", "s", minimum=0.0),
+        "end_time": Opt("float", None, "Final time", "s", minimum=0.0),
+        "inner_iterations": Opt(
+            "int", 50, "Maximum pseudo-time iterations per time step", minimum=1
+        ),
+        "inner_residual_drop": Opt(
+            "float",
+            3.0,
+            "Inner convergence per time step: orders of magnitude relative to "
+            "the unsteady residual of the previous solution",
+            minimum=0.0,
+        ),
+        "inner_cfl": Opt(
+            "float",
+            1.0e4,
+            "Starting pseudo-time CFL number of the inner iterations",
+            minimum=0.0,
+        ),
     },
     "output": {
         "directory": Opt(
@@ -240,7 +264,11 @@ SCHEMA = {
         ),
         "formats": Opt("string_list", ["vtu"], "Field output formats"),
         "interval": Opt(
-            "int", 0, "Write fields every n iterations; 0 = only at the end", minimum=0
+            "int",
+            0,
+            "Write fields every n iterations (steady) or time steps (unsteady); "
+            "0 = only at the end",
+            minimum=0,
         ),
         "history": Opt("bool", True, "Write the convergence history (CSV and .log)"),
         "force_boundaries": Opt(
@@ -302,11 +330,6 @@ PLANNED = {
     "physics.transition": "stage 5 (RANS)",
     "solver.turbulence_coupling": "stage 5 (RANS)",
     "numerics.turbulence_spatial_order": "stage 5 (RANS)",
-    "time.scheme": "stage 4 (unsteady)",
-    "time.time_step": "stage 4 (unsteady)",
-    "time.end_time": "stage 4 (unsteady)",
-    "time.inner_iterations": "stage 4 (unsteady)",
-    "time.inner_residual_drop": "stage 4 (unsteady)",
     "initial.restart": "later",
     "initial.turbulence": "stage 5 (RANS)",
 }

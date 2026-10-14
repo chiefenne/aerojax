@@ -92,6 +92,36 @@ class RunLog:
         flag = note if accepted else ("rejected " + note).strip()
         self.write(f"{it:>6d}{cols}{cfl:>10.2e}{more}{elapsed:>10.1f}  {flag}".rstrip())
 
+    def step_header(self, residual_names, extra=()):
+        """Write the column header of the time-step lines (unsteady runs).
+
+        One line per physical time step: step, time, inner iterations used,
+        inner residual drop reached, residuals, ``extra`` columns (as in
+        :meth:`iteration_header`), elapsed time.
+        """
+        self._columns = list(residual_names)
+        self._extra = [e if isinstance(e, tuple) else (e, 7) for e in extra]
+        cols = "".join(f"{'log(R_' + n + ')':>12}" for n in self._columns)
+        more = "".join(f"{name:>{width}}" for name, width in self._extra)
+        self.write("")
+        self.write(
+            f"{'step':>6}{'time':>12}{'inner':>6}{'drop':>6}{cols}{more}"
+            f"{'time[s]':>10}  note"
+        )
+
+    def step(self, step, t, inner, drop, residuals, extra=(), note=""):
+        """Write one time-step line."""
+        with np.errstate(divide="ignore"):
+            logs = np.log10(np.asarray(residuals, dtype=float))
+        cols = "".join(f"{v:>12.4f}" for v in logs)
+        widths = [w for _, w in self._extra] + [7] * len(extra)
+        more = "".join(f"{str(e):>{w}}" for e, w in zip(extra, widths, strict=False))
+        elapsed = time.perf_counter() - self._t0
+        self.write(
+            f"{step:>6d}{t:>12.5e}{inner:>6d}{drop:>6.1f}{cols}{more}"
+            f"{elapsed:>10.1f}  {note}".rstrip()
+        )
+
     @property
     def elapsed(self):
         """Seconds since the log was opened."""

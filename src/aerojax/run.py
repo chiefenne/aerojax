@@ -6,6 +6,7 @@ is scaled by 1 / L_ref, velocities by 1 / U_ref, pressures by
 before output.
 """
 
+import dataclasses
 import math
 from pathlib import Path
 from typing import NamedTuple
@@ -15,11 +16,11 @@ import numpy as np
 from aerojax import __version__
 from aerojax.config import Resolved, load_case
 from aerojax.driver import IncompressibleProblem
-from aerojax.io import HistoryWriter, RunLog, write_vtu
+from aerojax.io import HistoryWriter, RunLog, StepHistoryWriter, write_pvd, write_vtu
 from aerojax.mesh import Mesh, read_su2
 from aerojax.physics import forces as fz
 from aerojax.physics import incompressible as inc
-from aerojax.solver import LinearSettings, PseudoTimeSettings
+from aerojax.solver import DualTimeSettings, LinearSettings, PseudoTimeSettings
 
 
 class Scaling(NamedTuple):
@@ -192,107 +193,234 @@ def run_case(path, console=True, mesh=None):
         problem, scaling, w0, mesh = setup(config, mesh)
         _log_setup(log, config, problem, scaling, mesh)
 
-        names = ("p", "u", "v")
-        implicit = cfg["solver"]["method"] == "implicit"
-        force_boundaries = cfg["output"]["force_boundaries"]
-        monitor = Monitor(config, problem, scaling) if force_boundaries else None
-        coeff_names = ("CL", "CD", "CM") if monitor else ()
-        history = HistoryWriter(out_dir / f"{name}.history.csv", names, coeff_names)
-        extra_names = (("NK", "GMRES") if implicit else ()) + tuple(
-            (c, 11) for c in coeff_names
-        )
-        log.iteration_header(names, extra_names)
-        interval = cfg["output"]["interval"]
-
-        timing = {"setup": None}
-
-        def callback(it, w, residuals, cfl, accepted):
-            if it == 0:
-                timing["setup"] = log.elapsed
-            info = callback.info
-            nk, lin = info.get("newton_krylov", False), info.get("linear_iterations", 0)
-            extra = ("NK" if nk else "", lin if lin else "") if implicit else ()
-            coeffs = monitor.coefficients(w) if monitor else ()
-            extra += tuple(f"{c:.5f}" for c in coeffs)
-            log.iteration(it, residuals, cfl, accepted, extra, info.pop("note", ""))
-            history.row(it, residuals, cfl, accepted, log.elapsed, nk, lin, coeffs)
-            if interval and it and it % interval == 0:
-                _write_fields(out_dir / f"{name}_{it:06d}.vtu", mesh, w, scaling)
-
-        callback.info = {}
-
-        solver = cfg["solver"]
-        if solver["method"] == "implicit":
-            settings = PseudoTimeSettings(
-                cfl_start=solver["cfl"]["start"],
-                cfl_max=solver["cfl"]["max"],
-                growth_factor=solver["cfl"]["growth_factor"],
-                cut_factor=solver["cfl"]["cut_factor"],
-                reject_factor=solver["cfl"]["reject_factor"],
-                max_iterations=solver["max_iterations"],
-                residual_drop=solver["residual_drop"],
-                first_order_iterations=cfg["numerics"]["first_order_iterations"],
-                newton_krylov=solver["newton_krylov"]["enabled"],
-                nk_switch_residual_drop=solver["newton_krylov"][
-                    "switch_at_residual_drop"
-                ],
-                nk_linear_tolerance=solver["newton_krylov"]["linear_tolerance"],
-                nk_restart=solver["newton_krylov"]["restart"],
-                nk_max_krylov=solver["newton_krylov"]["max_iterations"],
-                nk_refactor_interval=solver["newton_krylov"]["refactor_interval"],
-                linear=LinearSettings(**solver["linear_solver"]),
-            )
-            freeze = cfg["numerics"]["limiter_freeze"]
-            result = problem.solve(
-                w0,
-                settings,
-                callback=callback,
-                freeze_limiter_after_iterations=freeze["after_iterations"],
-                freeze_limiter_after_residual_drop=freeze["after_residual_drop"],
+        if cfg["time"]["mode"] == "unsteady":
+            result, coefficients = _run_unsteady(
+                log, config, problem, scaling, w0, mesh, out_dir
             )
         else:
-            result = problem.solve_explicit(
-                w0,
-                cfl=solver["cfl"]["explicit"],
-                max_iterations=solver["max_iterations"],
-                residual_drop=solver["residual_drop"],
-                callback=callback,
+            result, coefficients = _run_steady(
+                log, config, problem, scaling, w0, mesh, out_dir
             )
-        history.close()
-
-        w = result.u * np.array([scaling.pressure, scaling.velocity, scaling.velocity])
-        _write_fields(out_dir / f"{name}.vtu", mesh, result.u, scaling)
-        h = result.history
-        log.section("Summary")
-        nk_steps = int(np.count_nonzero(h["newton_krylov"]))
-        rows = [
-            ("converged", "yes" if result.converged else "NO"),
-            ("iterations", f"{int(h['iteration'][-1])} ({nk_steps} Newton-Krylov)"),
-            ("rejected updates", str(int(np.count_nonzero(~h["accepted"])))),
-            ("residual drop", f"{h['residual'][-1] / h['residual'][0]:.2e}"),
-            ("setup and compilation", f"{timing['setup']:.1f} s"),
-            ("wall time", f"{log.elapsed:.1f} s"),
-            ("fields", str(out_dir / f"{name}.vtu")),
-            ("history", str(history.path)),
-        ]
-        coefficients = None
-        if monitor:
-            coefficients = monitor.final(result.u)
-            c = coefficients
-            rows[4:4] = [
-                ("force boundaries", ", ".join(force_boundaries)),
-                ("CL, CD, CM", f"{c.cl:.6f}, {c.cd:.6f}, {c.cm:.6f}"),
-                ("CD pressure, viscous", f"{c.cd_pressure:.6f}, {c.cd_viscous:.6f}"),
-                ("Cx, Cy", f"{c.cx:.6f}, {c.cy:.6f}"),
-            ]
-            for bname in force_boundaries:
-                path = out_dir / f"{name}.wall_{bname}.csv"
-                monitor.write_wall(result.u, bname, path)
-                rows.append((f"wall '{bname}'", str(path)))
-        log.table(rows)
+    w = result.u * np.array([scaling.pressure, scaling.velocity, scaling.velocity])
     return RunResult(
         config, mesh, w, result.converged, result.history, out_dir, coefficients
     )
+
+
+def _pseudo_time_settings(cfg):
+    solver = cfg["solver"]
+    return PseudoTimeSettings(
+        cfl_start=solver["cfl"]["start"],
+        cfl_max=solver["cfl"]["max"],
+        growth_factor=solver["cfl"]["growth_factor"],
+        cut_factor=solver["cfl"]["cut_factor"],
+        reject_factor=solver["cfl"]["reject_factor"],
+        max_iterations=solver["max_iterations"],
+        residual_drop=solver["residual_drop"],
+        first_order_iterations=cfg["numerics"]["first_order_iterations"],
+        newton_krylov=solver["newton_krylov"]["enabled"],
+        nk_switch_residual_drop=solver["newton_krylov"]["switch_at_residual_drop"],
+        nk_linear_tolerance=solver["newton_krylov"]["linear_tolerance"],
+        nk_restart=solver["newton_krylov"]["restart"],
+        nk_max_krylov=solver["newton_krylov"]["max_iterations"],
+        nk_refactor_interval=solver["newton_krylov"]["refactor_interval"],
+        linear=LinearSettings(**solver["linear_solver"]),
+    )
+
+
+def _run_steady(log, config, problem, scaling, w0, mesh, out_dir):
+    """Steady solve with one log line per pseudo-time iteration."""
+    cfg = config.data
+    name = config.name
+    names = ("p", "u", "v")
+    implicit = cfg["solver"]["method"] == "implicit"
+    force_boundaries = cfg["output"]["force_boundaries"]
+    monitor = Monitor(config, problem, scaling) if force_boundaries else None
+    coeff_names = ("CL", "CD", "CM") if monitor else ()
+    history = HistoryWriter(out_dir / f"{name}.history.csv", names, coeff_names)
+    extra_names = (("NK", "GMRES") if implicit else ()) + tuple(
+        (c, 11) for c in coeff_names
+    )
+    log.iteration_header(names, extra_names)
+    interval = cfg["output"]["interval"]
+
+    timing = {"setup": None}
+
+    def callback(it, w, residuals, cfl, accepted):
+        if it == 0:
+            timing["setup"] = log.elapsed
+        info = callback.info
+        nk, lin = info.get("newton_krylov", False), info.get("linear_iterations", 0)
+        extra = ("NK" if nk else "", lin if lin else "") if implicit else ()
+        coeffs = monitor.coefficients(w) if monitor else ()
+        extra += tuple(f"{c:.5f}" for c in coeffs)
+        log.iteration(it, residuals, cfl, accepted, extra, info.pop("note", ""))
+        history.row(it, residuals, cfl, accepted, log.elapsed, nk, lin, coeffs)
+        if interval and it and it % interval == 0:
+            _write_fields(out_dir / f"{name}_{it:06d}.vtu", mesh, w, scaling)
+
+    callback.info = {}
+
+    solver = cfg["solver"]
+    if solver["method"] == "implicit":
+        settings = _pseudo_time_settings(cfg)
+        freeze = cfg["numerics"]["limiter_freeze"]
+        result = problem.solve(
+            w0,
+            settings,
+            callback=callback,
+            freeze_limiter_after_iterations=freeze["after_iterations"],
+            freeze_limiter_after_residual_drop=freeze["after_residual_drop"],
+        )
+    else:
+        result = problem.solve_explicit(
+            w0,
+            cfl=solver["cfl"]["explicit"],
+            max_iterations=solver["max_iterations"],
+            residual_drop=solver["residual_drop"],
+            callback=callback,
+        )
+    history.close()
+
+    _write_fields(out_dir / f"{name}.vtu", mesh, result.u, scaling)
+    h = result.history
+    log.section("Summary")
+    nk_steps = int(np.count_nonzero(h["newton_krylov"]))
+    rows = [
+        ("converged", "yes" if result.converged else "NO"),
+        ("iterations", f"{int(h['iteration'][-1])} ({nk_steps} Newton-Krylov)"),
+        ("rejected updates", str(int(np.count_nonzero(~h["accepted"])))),
+        ("residual drop", f"{h['residual'][-1] / h['residual'][0]:.2e}"),
+        ("setup and compilation", f"{timing['setup']:.1f} s"),
+        ("wall time", f"{log.elapsed:.1f} s"),
+        ("fields", str(out_dir / f"{name}.vtu")),
+        ("history", str(history.path)),
+    ]
+    coefficients = None
+    if monitor:
+        coefficients = monitor.final(result.u)
+        c = coefficients
+        rows[4:4] = [
+            ("force boundaries", ", ".join(force_boundaries)),
+            ("CL, CD, CM", f"{c.cl:.6f}, {c.cd:.6f}, {c.cm:.6f}"),
+            ("CD pressure, viscous", f"{c.cd_pressure:.6f}, {c.cd_viscous:.6f}"),
+            ("Cx, Cy", f"{c.cx:.6f}, {c.cy:.6f}"),
+        ]
+        for bname in force_boundaries:
+            path = out_dir / f"{name}.wall_{bname}.csv"
+            monitor.write_wall(result.u, bname, path)
+            rows.append((f"wall '{bname}'", str(path)))
+    log.table(rows)
+    return result, coefficients
+
+
+def _run_unsteady(log, config, problem, scaling, w0, mesh, out_dir):
+    """Dual time stepping with one log line per physical time step (D45)."""
+    cfg = config.data
+    name = config.name
+    tm = cfg["time"]
+    t_scale = scaling.length / scaling.velocity  # physical seconds per unit time
+    names = ("p", "u", "v")
+    force_boundaries = cfg["output"]["force_boundaries"]
+    monitor = Monitor(config, problem, scaling) if force_boundaries else None
+    coeff_names = ("CL", "CD", "CM") if monitor else ()
+    history = StepHistoryWriter(out_dir / f"{name}.history.csv", names, coeff_names)
+    detailed = cfg["output"]["verbosity"] == "detailed"
+    log.step_header(names, ("GMRES",) + tuple((c, 11) for c in coeff_names))
+    interval = cfg["output"]["interval"]
+    series = []
+    timing = {"setup": None}
+
+    def write_series(step, t, w):
+        file = f"{name}_{step:06d}.vtu"
+        _write_fields(out_dir / file, mesh, w, scaling)
+        series.append((t * t_scale, file))
+        write_pvd(out_dir / f"{name}.pvd", series)
+
+    def callback(step, t, w, residuals, inner, drop, converged):
+        if timing["setup"] is None:
+            timing["setup"] = log.elapsed
+        lin = callback.info.get("linear_iterations", 0)
+        coeffs = monitor.coefficients(w) if monitor else ()
+        extra = (lin if lin else "",) + tuple(f"{c:.5f}" for c in coeffs)
+        note = "" if converged else "inner limit"
+        log.step(step, t * t_scale, inner, drop, residuals, extra, note)
+        history.row(
+            step,
+            t * t_scale,
+            residuals,
+            inner,
+            drop,
+            converged,
+            lin,
+            coeffs,
+            log.elapsed,
+        )
+        if interval and step % interval == 0:
+            write_series(step, t, w)
+        if detailed:
+            log.iteration_header(names, ("NK", "GMRES"))
+            log.step_header(names, ("GMRES",) + tuple((c, 11) for c in coeff_names))
+
+    callback.info = {}
+
+    def inner_callback(it, w, residuals, cfl, accepted):
+        info = inner_callback.info
+        nk, lin = info.get("newton_krylov", False), info.get("linear_iterations", 0)
+        log.iteration(it, residuals, cfl, accepted, ("NK" if nk else "", lin or ""))
+
+    inner_callback.info = {}
+
+    inner = dataclasses.replace(
+        _pseudo_time_settings(cfg),
+        cfl_start=tm["inner_cfl"],
+        max_iterations=tm["inner_iterations"],
+        residual_drop=tm["inner_residual_drop"],
+        first_order_iterations=0,
+        nk_switch_residual_drop=0.0,
+    )
+    settings = DualTimeSettings(
+        tm["time_step"] / t_scale, tm["end_time"] / t_scale, tm["scheme"], inner
+    )
+    result = problem.solve_unsteady(
+        w0,
+        settings,
+        callback=callback,
+        inner_callback=inner_callback if detailed else None,
+    )
+    history.close()
+
+    n_steps = int(result.history["step"][-1]) if result.history["step"].size else 0
+    if not interval or n_steps % interval:
+        write_series(n_steps, result.time, result.u)
+    _write_fields(out_dir / f"{name}.vtu", mesh, result.u, scaling)
+    h = result.history
+    log.section("Summary")
+    rows = [
+        ("time steps", f"{n_steps} ({tm['scheme']}, dt = {tm['time_step']} s)"),
+        ("final time", f"{result.time * t_scale:.6g} s"),
+        ("inner iterations", f"{h['inner_iterations'].mean():.1f} per step (mean)"),
+        ("steps at inner limit", str(int(np.count_nonzero(~h["converged"])))),
+        ("setup and compilation", f"{timing['setup']:.1f} s"),
+        ("wall time", f"{log.elapsed:.1f} s"),
+        ("fields", str(out_dir / f"{name}.vtu")),
+        ("field series", str(out_dir / f"{name}.pvd")),
+        ("history", str(history.path)),
+    ]
+    coefficients = None
+    if monitor:
+        coefficients = monitor.final(result.u)
+        c = coefficients
+        rows[4:4] = [
+            ("force boundaries", ", ".join(force_boundaries)),
+            ("CL, CD, CM (final)", f"{c.cl:.6f}, {c.cd:.6f}, {c.cm:.6f}"),
+        ]
+        for bname in force_boundaries:
+            path = out_dir / f"{name}.wall_{bname}.csv"
+            monitor.write_wall(result.u, bname, path)
+            rows.append((f"wall '{bname}'", str(path)))
+    log.table(rows)
+    return result, coefficients
 
 
 class Monitor:

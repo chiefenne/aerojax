@@ -93,3 +93,52 @@ def test_cli_check_and_run(case_dir, capsys):
     (case_dir / "bad.toml").write_text(COUETTE.replace("limiter", "limitr"))
     assert main(["check", str(case_dir / "bad.toml")]) == 1
     assert "did you mean 'numerics.limiter'" in capsys.readouterr().err
+
+
+def unsteady_couette_exact(y, t, height, velocity, viscosity, terms=200):
+    """Impulsively started Couette flow (lid starts at t = 0)."""
+    n = np.arange(1, terms + 1)[:, None]
+    series = (
+        (-1.0) ** n
+        / n
+        * np.exp(-(n**2) * np.pi**2 * viscosity * t / height**2)
+        * np.sin(n * np.pi * y[None, :] / height)
+    )
+    return velocity * (y / height + 2.0 / np.pi * series.sum(axis=0))
+
+
+UNSTEADY = (
+    COUETTE.replace('name = "couette_test"', 'name = "couette_unsteady"')
+    .replace("density = 2.0\nviscosity = 0.3", "density = 1.0\nviscosity = 0.1")
+    .replace("velocity = 3.0\nlength = 0.5", "velocity = 1.0\nlength = 0.5")
+    .replace("velocity = [3.0, 0.0]", "velocity = [1.0, 0.0]")
+    + """
+[time]
+mode = "unsteady"
+time_step = 0.05
+end_time = 0.5
+"""
+)
+
+
+def test_run_case_unsteady_couette(tmp_path):
+    """Starting Couette flow (rho = 1, mu = 0.1, H = 0.5 m, U = 1 m/s) vs series."""
+    mesh = rectangle(4, 32, x=(0.0, 1.0), y=(0.0, 0.5), cell_type="quad")
+    write_su2(tmp_path / "channel.su2", mesh)
+    (tmp_path / "couette.toml").write_text(
+        UNSTEADY.replace('directory = "out"', 'directory = "out"\ninterval = 4')
+    )
+    result = run_case(tmp_path / "couette.toml", console=False)
+    assert result.converged
+    y = result.mesh.cell_centroid[:, 1]
+    exact = unsteady_couette_exact(y, 0.5, 0.5, 1.0, 0.1)
+    assert np.abs(result.w[:, 1] - exact).max() < 0.01
+    out = tmp_path / "out"
+    assert result.history["step"][-1] == 10
+    assert (out / "couette_unsteady.pvd").exists()
+    for step in (4, 8, 10):
+        assert (out / f"couette_unsteady_{step:06d}.vtu").exists()
+    log = (out / "couette_unsteady.log").read_text()
+    assert "inner  drop" in log and "time steps             10 (bdf2" in log
+    head = (out / "couette_unsteady.history.csv").read_text().splitlines()[0]
+    assert head.startswith("step,time,residual_p") and "inner_residual_drop" in head

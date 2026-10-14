@@ -269,6 +269,17 @@ def _consistency(data, explicit, problems, notices, path):
             if partner == name:
                 problems.append(f"boundary.{name}: periodic partner is itself")
 
+    # Unsteady runs need the time step and the final time.
+    tm = data["time"]
+    if tm["mode"] == "unsteady":
+        for key in ("time_step", "end_time"):
+            if tm[key] is None:
+                problems.append(f"time.{key} is required with time.mode = unsteady")
+        if tm["time_step"] and tm["end_time"] and tm["end_time"] < tm["time_step"]:
+            problems.append("time.end_time must not be smaller than time.time_step")
+    elif any(tm[k] is not None for k in ("time_step", "end_time")):
+        notices.append("time.time_step / end_time ignored in steady mode")
+
     # Viscosity: exactly one of viscosity / reynolds_number, unless Euler.
     has_mu, has_re = (
         fluid["viscosity"] is not None,

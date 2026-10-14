@@ -147,6 +147,7 @@ def solve_steady(
     residual_startup=None,
     callback=None,
     jvp=None,
+    reference_norm=None,
 ):
     """Drive ``residual(u)`` to zero by implicit pseudo-time stepping.
 
@@ -171,6 +172,9 @@ def solve_steady(
     jvp : callable, optional
         ``jvp(u, du) -> dR/du(u) @ du`` of the full residual; enables the
         Newton-Krylov phase.
+    reference_norm : float, optional
+        Residual norm that ``residual_drop`` and the Newton-Krylov switch
+        refer to; default the norm of the initial residual.
 
     Returns
     -------
@@ -186,7 +190,9 @@ def solve_steady(
 
     r = res(u, 1)
     norm = rms(r)
-    norm0 = max(norm, np.finfo(float).tiny)
+    norm0 = max(
+        norm if reference_norm is None else reference_norm, np.finfo(float).tiny
+    )
     target = norm0 * 10.0 ** (-s.residual_drop)
     nk_threshold = norm0 * 10.0 ** (-s.nk_switch_residual_drop)
     cfl = s.cfl_start

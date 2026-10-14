@@ -1,6 +1,6 @@
 # aerojax – Case configuration
 
-**Status:** implemented for steady laminar/Euler cases (stage 3). Keys of
+**Status:** implemented for steady and unsteady laminar/Euler cases (stage 4). Keys of
 later stages are listed here for completeness and rejected by the validator
 with a pointer to the stage. The schema of record is
 `src/aerojax/config/schema.py`; `aerojax check case.toml` prints the resolved
@@ -326,12 +326,15 @@ Needed for force and moment coefficients, and for `fluid.reynolds_number`.
 
 | Key | Type | Default | Description | # |
 |-----|------|---------|-------------|---|
-| `mode` | `"steady"` \| `"unsteady"` | `"steady"` | `"unsteady"` from stage 4 | D9 |
-| `scheme` | `"bdf2"` | `"bdf2"` | Dual time stepping; the first time step uses BDF1 | D9, D37 |
+| `mode` | `"steady"` \| `"unsteady"` | `"steady"` | `"unsteady"`: dual time stepping from the initial state to `end_time` | D9 |
+| `scheme` | `"bdf2"` \| `"bdf1"` | `"bdf2"` | Physical time discretisation; the first time step always uses BDF1 | D9, D37 |
 | `time_step` | float | req. if unsteady | Δt in s | D9 |
-| `end_time` | float | req. if unsteady | in s | D9 |
-| `inner_iterations` | int | `50` | Maximum pseudo-time iterations per time step (tentative) | D37 |
-| `inner_residual_drop` | float | `3.0` | Inner convergence, orders of magnitude (tentative) | D37 |
+| `end_time` | float | req. if unsteady | in s; the number of steps is `end_time / time_step` rounded | D9 |
+| `inner_iterations` | int | `50` | Maximum pseudo-time iterations per time step | D37 |
+| `inner_residual_drop` | float | `3.0` | Inner convergence per time step: orders of magnitude relative to the unsteady residual of the previous solution | D37 |
+| `inner_cfl` | float | `1e4` | Starting pseudo-time CFL of the inner iterations (the physical time term stabilises the inner system; the SER control of `[solver].cfl` applies from there) | D37 |
+
+The other `[solver]` settings (CFL control, Newton–Krylov, linear solver) apply to the inner iterations as well; Newton–Krylov is used from the first inner iteration. Unsteady runs write one log line and one history row per time step (step, time, inner iterations used, inner residual drop reached, residuals, GMRES iterations, coefficients); `output.verbosity = "detailed"` adds the inner iteration lines. Fields are written every `output.interval` time steps as `<name>_<step>.vtu`, collected in `<name>.pvd` (ParaView time series), plus the final `<name>.vtu`.
 
 ### `[output]`
 

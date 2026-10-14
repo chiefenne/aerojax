@@ -20,6 +20,7 @@ from aerojax.solver import (
     replace_rows,
     solve_explicit,
     solve_steady,
+    solve_unsteady,
 )
 
 PRESSURE_FIXING = {"pressure-outlet", "farfield", "total-pressure-inlet"}
@@ -282,6 +283,37 @@ class IncompressibleProblem:
             residual_startup=residual_startup,
             callback=on_iteration,
             jvp=lambda w, dw: self.jvp(w, dw, state["beta2"], state["psi"]),
+        )
+
+    def mass(self):
+        """Diagonal of the physical-time mass matrix: rho * area on u, v."""
+        area = np.asarray(self.geom.area)
+        return area[:, None] * np.array([0.0, self.model.density, self.model.density])
+
+    def solve_unsteady(self, w0, settings, callback=None, inner_callback=None):
+        """Dual time stepping from ``w0`` to ``settings.end_time`` (D9, D37).
+
+        Every time step solves the steady residual plus the BDF time term
+        with the inner pseudo-time/Newton-Krylov iterations of
+        ``settings.inner``; beta^2 follows the current state, the limiter is
+        not frozen.
+        """
+        state = {"beta2": self.beta2(w0)}
+
+        def residual(w):
+            state["beta2"] = self.beta2(w)
+            return self.residual(w, state["beta2"])
+
+        return solve_unsteady(
+            residual,
+            lambda w: self.jacobian(w, state["beta2"]),
+            lambda w, cfl: self.time_term(w, state["beta2"], cfl),
+            self.mass(),
+            w0,
+            settings,
+            callback=callback,
+            inner_callback=inner_callback,
+            jvp=lambda w, dw: self.jvp(w, dw, state["beta2"]),
         )
 
     def solve_explicit(
