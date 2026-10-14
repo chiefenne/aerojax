@@ -139,10 +139,14 @@ SCHEMA = {
             "string",
             "venkatakrishnan-wang",
             "Slope limiter",
-            choices=("venkatakrishnan-wang", "none"),
+            choices=("venkatakrishnan-wang", "venkatakrishnan", "none"),
         ),
         "limiter_threshold": Opt(
-            "float", 0.05, "Wang's epsilon' (suggested 0.01-0.20)", minimum=0.0
+            "float",
+            0.05,
+            "Wang's epsilon' (suggested 0.01-0.20), or K of the local "
+            "Venkatakrishnan threshold eps^2 = (K h)^3",
+            minimum=0.0,
         ),
         "gradient": Opt(
             "string",
@@ -237,6 +241,9 @@ SCHEMA = {
                 2.0,
                 "Residual drop (orders of magnitude) at which to switch",
                 minimum=0.0,
+            ),
+            "switch_at_iteration": Opt(
+                "int", None, "Switch at this iteration at the latest", minimum=1
             ),
             "linear_tolerance": Opt(
                 "float", 1.0e-2, "Relative GMRES tolerance per Newton step", minimum=0.0

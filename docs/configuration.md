@@ -1,6 +1,6 @@
 # aerojax – Case configuration
 
-**Status:** implemented for steady and unsteady laminar, Euler and RANS (SA-neg) cases (stage 5). Keys of
+**Status:** implemented for steady and unsteady laminar, Euler and RANS (SA-neg) cases (stage 6). Keys of
 later stages are listed here for completeness and rejected by the validator
 with a pointer to the stage. The schema of record is
 `src/aerojax/config/schema.py`; `aerojax check case.toml` prints the resolved
@@ -299,8 +299,8 @@ Needed for force and moment coefficients, and for `fluid.reynolds_number`.
 |-----|------|---------|-------------|---|
 | `convective_flux` | `"fds"` | `"fds"` | Flux-difference splitting with low-speed preconditioning | D21 |
 | `spatial_order` | `1` \| `2` | `2` | 1: piecewise constant; 2: MUSCL reconstruction | D21 |
-| `limiter` | `"venkatakrishnan-wang"` \| `"none"` | `"venkatakrishnan-wang"` | Slope limiter | D23 |
-| `limiter_threshold` | float | `0.05` | Wang's ε′ (suggested range 0.01–0.20) | D23 |
+| `limiter` | `"venkatakrishnan-wang"` \| `"venkatakrishnan"` \| `"none"` | `"venkatakrishnan-wang"` | Slope limiter. `"venkatakrishnan"`: the classic form with the local threshold ε² = (K h)³, h = √(cell area) — use it for high-Reynolds-number boundary layers on curved walls (airfoils), where the global-range threshold of `"venkatakrishnan-wang"` leaves the thin wall cells unlimited and the reconstruction diverges | D23 |
+| `limiter_threshold` | float | `0.05` | Wang's ε′ (suggested range 0.01–0.20), or K of the local threshold | D23 |
 | `limiter_freeze` | table | – | `{ after_iterations = n }` and/or `{ after_residual_drop = orders }`: freeze the limiter values once either condition holds, so that Newton–Krylov converges to machine precision | D23 |
 | `gradient` | `"weighted-least-squares"` | `"weighted-least-squares"` | Vertex-neighbour stencil | D22 |
 | `gradient_weight_exponent` | float | `1.0` | q in weights 1/d^q; default to be confirmed by verification | D22 |
@@ -318,7 +318,7 @@ Needed for force and moment coefficients, and for `fluid.reynolds_number`.
 | `max_iterations` | int | `10000` | Pseudo-time iterations (steady) | |
 | `residual_drop` | float | `8.0` | Convergence: orders of magnitude of residual reduction | |
 | `cfl` | table | `{ start = 10.0, max = 1.0e10, growth_factor = 2.0, cut_factor = 0.1, reject_factor = 10.0, explicit = 1.0 }` | Pseudo-time CFL number: SER control with at least `growth_factor` per accepted iteration. An update is rejected (and the CFL multiplied by `cut_factor`) if the linear solve fails, the update is not finite, or the residual grows by more than `reject_factor`. `explicit` is the CFL of the explicit Runge–Kutta mode | D35 |
-| `newton_krylov` | table | `{ enabled = true, switch_at_residual_drop = 2.0, linear_tolerance = 1e-2, restart = 50, max_iterations = 200, refactor_interval = 1 }` | Switch from approximate-Jacobian iterations to Newton–Krylov once the residual has dropped by the given orders; GMRES on the exact Jacobian (`jax.jvp`) preconditioned by the factorized first-order system. `refactor_interval = n` rebuilds the preconditioner only every n-th Newton step (more GMRES iterations, fewer factorizations) | D25 |
+| `newton_krylov` | table | `{ enabled = true, switch_at_residual_drop = 2.0, switch_at_iteration = none, linear_tolerance = 1e-2, restart = 50, max_iterations = 200, refactor_interval = 1 }` | Switch from approximate-Jacobian iterations to Newton–Krylov once the residual has dropped by the given orders, or at `switch_at_iteration` at the latest (the approximate-Jacobian iteration stalls one to three orders below the start, so a relative switch alone can miss; airfoil cases use 40); GMRES on the exact Jacobian (`jax.jvp`) preconditioned by the factorized first-order system. `refactor_interval = n` rebuilds the preconditioner only every n-th Newton step (more GMRES iterations, fewer factorizations) | D25 |
 | `linear_solver` | table | `{ type = "direct", tolerance = 1e-6, restart = 50, max_iterations = 500, ilu_drop_tolerance = 1e-5, ilu_fill_factor = 20, ordering = "mmd-at-plus-a" }` | `"direct"`: sparse LU (SciPy SuperLU). `"gmres-ilu"`: GMRES with an incomplete LU; the ILU options set its accuracy and memory (fill 3–5× with drop 1e-3 / fill 5, close to the exact LU with the defaults). Both also precondition Newton–Krylov. `ordering`: SuperLU column ordering, `"mmd-at-plus-a"` (least fill for the mean-flow Jacobian) or `"colamd"` | D32 |
 | `turbulence_coupling` | `"segregated"` \| `"coupled"` | `"segregated"` | First-order Jacobian of RANS runs: `"segregated"` drops the mean-flow/turbulence coupling blocks (mean flow and ν̃ updated from the same state, as in SU2's segregated solver), `"coupled"` keeps them. The Newton–Krylov phase uses the exact coupled Jacobian-vector products in both. On the flat plate the coupled Jacobian needs more iterations and a 100× larger LU fill with the default ordering: use `linear_solver.ordering = "colamd"` with it | D34 |
 

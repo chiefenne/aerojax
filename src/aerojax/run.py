@@ -318,6 +318,7 @@ def _pseudo_time_settings(cfg):
         first_order_iterations=cfg["numerics"]["first_order_iterations"],
         newton_krylov=solver["newton_krylov"]["enabled"],
         nk_switch_residual_drop=solver["newton_krylov"]["switch_at_residual_drop"],
+        nk_switch_iteration=solver["newton_krylov"]["switch_at_iteration"],
         nk_linear_tolerance=solver["newton_krylov"]["linear_tolerance"],
         nk_restart=solver["newton_krylov"]["restart"],
         nk_max_krylov=solver["newton_krylov"]["max_iterations"],

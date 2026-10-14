@@ -1,6 +1,28 @@
 # Changelog
 
-## 0.5 – Stage 5: RANS with the SA-neg model (not yet tagged)
+## 0.6 – Stage 6: NACA 0012 (not yet tagged)
+
+- Airfoil O-grid generator (`aerojax.mesh.airfoil`): TMR NACA 0012
+  definition, cosine surface spacing with a small blunt trailing edge
+  (0.14 % chord: the fan of nearly flat cells of a sharp trailing edge is
+  unstable at high Reynolds numbers), marching along smoothed normals
+  blended into the radial direction, farfield at 500 chords, fold check.
+- Classic Venkatakrishnan limiter with the local threshold ε² = (K h)³
+  (`limiter = "venkatakrishnan"`): the global-range threshold of the
+  Venkatakrishnan–Wang limiter leaves the thin wall cells of a high-Re
+  boundary layer unlimited, and the reconstruction diverges on the curved
+  nose. Newton–Krylov switch at a fixed iteration
+  (`newton_krylov.switch_at_iteration`) in addition to the residual drop.
+- Case R2 (`aerojax.cases.naca0012`): C_L, C_D (pressure/viscous), C_M, C_p
+  and C_f at Re 6e6 vs the TMR SA values. 256 x 128 O-grid (33k cells):
+  C_L -0.008 / 1.076 / 1.536 at α = 0 / 10 / 15° (TMR 0 / 1.091 / 1.509),
+  viscous drag close to TMR, pressure drag too high on the coarse O-grid
+  wake (see docs/requirements.md D40). PyAero meshes (boundary faces
+  `airfoil`, `farfield`) can be used directly.
+- Examples: `examples/stage6_naca0012.py`, TOML case
+  `examples/cases/naca0012_rans.toml`.
+
+## 0.5 – Stage 5: RANS with the SA-neg model (2026-10-14)
 
 - Spalart–Allmaras, negative variant (NASA TMR SA-neg, with f_t2 and the
   modified S̃), as fourth variable ν̃ of the coupled state (D11, D13):

@@ -75,7 +75,7 @@ class IncompressibleModel(NamedTuple):
         epsilon^2 in beta^2 = epsilon^2 max|v|^2 (SU2 default 4.1).
     spatial_order : int
         1 or 2 (MUSCL reconstruction of the convective states).
-    limiter : {"none", "venkatakrishnan-wang"}
+    limiter : {"none", "venkatakrishnan-wang", "venkatakrishnan"}
     limiter_threshold : float
         Wang's epsilon'.
     viscous_gradient : {"alpha-damping", "edge-correction"}
@@ -393,6 +393,10 @@ def boundary_convective_flux(model, bc, normal, w_in, beta2):
 def _limiter(model, geom, w, w_b, grad):
     if model.limiter == "venkatakrishnan-wang":
         return venkatakrishnan_wang(geom, w, w_b, grad, model.limiter_threshold)
+    if model.limiter == "venkatakrishnan":
+        return venkatakrishnan_wang(
+            geom, w, w_b, grad, model.limiter_threshold, local=True
+        )
     if model.limiter == "none":
         return jnp.ones_like(w)
     raise ValueError(f"unknown limiter '{model.limiter}'")

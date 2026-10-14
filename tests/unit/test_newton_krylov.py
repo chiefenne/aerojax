@@ -114,7 +114,7 @@ def test_nk_settings_in_config():
             "right": {"type": "wall"},
         },
         "solver": {
-            "newton_krylov": {"enabled": False},
+            "newton_krylov": {"enabled": False, "switch_at_iteration": 40},
             "linear_solver": {"type": "gmres-ilu", "ilu_fill_factor": 5.0},
         },
         "numerics": {"limiter_freeze": {"after_residual_drop": 3.0}},
@@ -122,6 +122,7 @@ def test_nk_settings_in_config():
     cfg = resolve(raw)
     assert cfg["solver"]["newton_krylov"]["enabled"] is False
     assert cfg["solver"]["newton_krylov"]["switch_at_residual_drop"] == 2.0
+    assert cfg["solver"]["newton_krylov"]["switch_at_iteration"] == 40
     assert cfg["solver"]["linear_solver"]["ilu_fill_factor"] == 5.0
     assert cfg["numerics"]["limiter_freeze"]["after_iterations"] is None
     with pytest.raises(Exception, match="not one of"):

@@ -74,6 +74,9 @@ class PseudoTimeSettings:
         Switch to Newton-Krylov (needs ``jvp``).
     nk_switch_residual_drop : float
         Residual drop (orders of magnitude) at which the switch happens.
+    nk_switch_iteration : int or None
+        Switch at this iteration at the latest (the approximate-Jacobian
+        iteration typically stalls two to three orders below the start).
     nk_linear_tolerance : float
         Relative tolerance of the GMRES solve in the Newton-Krylov phase.
     nk_restart : int
@@ -100,6 +103,7 @@ class PseudoTimeSettings:
     growth_factor: float = 2.0
     newton_krylov: bool = True
     nk_switch_residual_drop: float = 2.0
+    nk_switch_iteration: int = None
     nk_linear_tolerance: float = 1.0e-2
     nk_restart: int = 50
     nk_max_krylov: int = 200
@@ -216,8 +220,12 @@ def solve_steady(
         if it == s.first_order_iterations + 1 and residual_startup is not None:
             r = res(u, it)  # switch to the full residual
             norm = rms(r)
+        by_iteration = s.nk_switch_iteration is not None and it > s.nk_switch_iteration
         use_nk = (
-            s.newton_krylov and jvp is not None and not startup and norm <= nk_threshold
+            s.newton_krylov
+            and jvp is not None
+            and not startup
+            and (norm <= nk_threshold or by_iteration)
         )
         t_matrix = time_term(u, cfl)
         accepted, lin_its = False, 0

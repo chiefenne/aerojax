@@ -7,18 +7,28 @@ Face states are extrapolated from the cell centroid to the face centre:
 with the limiter psi_i in [0, 1] per cell and variable.
 """
 
+from functools import partial
+
 import jax
 import jax.numpy as jnp
 
 
-@jax.jit
-def venkatakrishnan_wang(geom, u, u_b, grad, threshold=0.05):
+@partial(jax.jit, static_argnames=("local",))
+def venkatakrishnan_wang(geom, u, u_b, grad, threshold=0.05, local=False):
     """Venkatakrishnan limiter with Wang's scale-independent threshold.
 
     The smoothness threshold is eps = threshold * (max(u) - min(u)), with the
     global range of each variable (Wang's suggested threshold range is
     0.01-0.20). Minimum and maximum per cell are taken over the cell itself and
     its face neighbours, including boundary-face values.
+
+    With ``local`` = True the classic cell-size threshold eps^2 = (K h)^3 is
+    used instead, with K = ``threshold`` and h = sqrt(cell area): in the thin
+    cells of a high-Reynolds-number boundary layer the global threshold is
+    larger than the whole near-wall velocity variation and leaves the
+    reconstruction unlimited, which diverges on curved walls (the face-centre
+    offsets of curved cells turn the wall-normal gradient into tangential
+    overshoots); the local threshold limits there.
 
     For threshold = 0 the reconstructed face values stay within these bounds;
     for threshold > 0 they may exceed them by O(eps), which is what keeps the
@@ -54,14 +64,18 @@ def venkatakrishnan_wang(geom, u, u_b, grad, threshold=0.05):
             jax.ops.segment_min(u_b, b, num_segments=n),
         ),
     )
-    all_values = jnp.concatenate((u, u_b))
-    eps2 = (threshold * (all_values.max(axis=0) - all_values.min(axis=0))) ** 2
+    if local:
+        eps2 = ((threshold * jnp.sqrt(geom.area)) ** 3)[:, None]
+    else:
+        all_values = jnp.concatenate((u, u_b))
+        eps2 = (threshold * (all_values.max(axis=0) - all_values.min(axis=0))) ** 2
 
     def face_limiter(cells, dx):
         d2 = jnp.einsum("fvk,fk->fv", grad[cells], dx)
         d1 = jnp.where(d2 > 0.0, u_max[cells] - u[cells], u_min[cells] - u[cells])
-        num = d1**2 + eps2 + 2.0 * d1 * d2
-        den = d1**2 + 2.0 * d2**2 + d1 * d2 + eps2
+        e2 = eps2[cells] if local else eps2
+        num = d1**2 + e2 + 2.0 * d1 * d2
+        den = d1**2 + 2.0 * d2**2 + d1 * d2 + e2
         return jnp.where(den > 0.0, num / jnp.where(den > 0.0, den, 1.0), 1.0)
 
     psi = jnp.ones_like(u)
