@@ -13,7 +13,9 @@ def test_airfoil_geometry_and_ogrid():
     assert pts.shape == (64 + 3, 2)  # 64 surface nodes + 3 base nodes
     assert np.isclose(pts[:, 0].max(), 1.0) and np.isclose(pts[:, 0].min(), 0.0)
     assert thickness(0.3) == pytest.approx(0.0595, abs=5e-4)  # 12 % thick (TMR: 11.9 %)
-    mesh = naca0012_ogrid(64, 32, farfield_radius=50.0)
+    with pytest.raises(ValueError, match="growth ratio"):
+        naca0012_ogrid(64, 32, farfield_radius=50.0)
+    mesh = naca0012_ogrid(64, 32, reynolds=1.0e4, farfield_radius=50.0)
     assert mesh.n_cells == 67 * 32 and mesh.cell_area.min() > 0.0
     far = mesh.nodes[-67:]
     radius = np.linalg.norm(far - [0.5, 0.0], axis=1)
