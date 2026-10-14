@@ -42,6 +42,11 @@ class LinearSettings:
         Drop tolerance of the incomplete LU.
     ilu_fill_factor : float
         Fill factor of the incomplete LU.
+    ordering : {"mmd-at-plus-a", "colamd"}
+        SuperLU column ordering. The minimum-degree ordering of A + A^T
+        gives the least fill for the mean-flow Jacobian (symmetric pattern);
+        with the coupled turbulence Jacobian its threshold pivoting inflates
+        the fill by 100x, where COLAMD stays at about 20x (D34).
 
     The ILU defaults were set on the 64x64 cavity at Re 1000: drop 1e-5 with
     fill 20 needs about as many GMRES iterations as the exact LU (3 per
@@ -55,6 +60,7 @@ class LinearSettings:
     max_iterations: int = 500
     ilu_drop_tolerance: float = 1.0e-5
     ilu_fill_factor: float = 20.0
+    ordering: str = "mmd-at-plus-a"
 
 
 # SuperLU options. The Jacobian has a symmetric sparsity pattern, for which
@@ -65,14 +71,21 @@ class LinearSettings:
 # let the fill grow to >100x on a converged Euler state, 0.1 keeps it at 7x
 # (diagonal pivots are used unless smaller than 0.1 times the column maximum).
 SUPERLU_OPTIONS = {"permc_spec": "MMD_AT_PLUS_A", "diag_pivot_thresh": 0.1}
+ORDERINGS = {"mmd-at-plus-a": "MMD_AT_PLUS_A", "colamd": "COLAMD"}
+
+
+def superlu_options(settings):
+    """SuperLU keyword arguments for the given settings."""
+    return {**SUPERLU_OPTIONS, "permc_spec": ORDERINGS[settings.ordering]}
 
 
 class DirectLU:
     """Sparse LU factorization of a matrix."""
 
-    def __init__(self, matrix):
+    def __init__(self, matrix, settings=None):
         try:
-            self._lu = spla.splu(matrix.tocsc(), **SUPERLU_OPTIONS)
+            opts = superlu_options(settings or LinearSettings())
+            self._lu = spla.splu(matrix.tocsc(), **opts)
         except RuntimeError as exc:  # "Factor is exactly singular"
             raise LinearSolverError(str(exc)) from exc
         self.iterations = 0
@@ -97,7 +110,7 @@ class GmresILU:
                 self._matrix,
                 drop_tol=settings.ilu_drop_tolerance,
                 fill_factor=settings.ilu_fill_factor,
-                **SUPERLU_OPTIONS,
+                **superlu_options(settings),
             )
         except RuntimeError as exc:
             raise LinearSolverError(str(exc)) from exc
@@ -125,7 +138,7 @@ def factorize(matrix, settings=None):
     """Return a solver object (:class:`DirectLU` or :class:`GmresILU`)."""
     s = settings or LinearSettings()
     if s.type == "direct":
-        return DirectLU(matrix)
+        return DirectLU(matrix, settings)
     if s.type == "gmres-ilu":
         return GmresILU(matrix, s)
     raise ValueError(f"linear solver type must be one of {SOLVERS}")

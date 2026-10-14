@@ -1,0 +1,191 @@
+"""SA-neg model functions, wall distance, laminar regions, RANS case files."""
+
+import jax
+import numpy as np
+import pytest
+
+from aerojax.config import resolve
+from aerojax.driver import IncompressibleProblem
+from aerojax.mesh import rectangle, split_boundary
+from aerojax.numerics.wall_distance import mesh_wall_distance, wall_distance
+from aerojax.physics import incompressible as inc
+from aerojax.physics import spalart_allmaras as sa
+from aerojax.run import run_case, turbulence_values
+
+
+def test_sa_eddy_viscosity_conversions():
+    chi = np.array([0.5, 3.0, 50.0])
+    ratio = sa.eddy_viscosity_ratio(chi)
+    np.testing.assert_allclose(sa.nu_tilde_from_eddy_viscosity(ratio), chi, rtol=1e-10)
+    assert sa.eddy_viscosity_ratio(3.0) == pytest.approx(0.2104, abs=5e-4)
+    assert float(sa.eddy_viscosity(-1.0, 1.0)) == 0.0
+
+
+def test_sa_source_and_derivative_are_finite():
+    nu = 1e-6
+    for nt in (0.0, 1e-7, 1e-5, 1e-3, -1e-6, -5e-6):
+        for omega in (0.0, 1e-3, 1e3):
+            val = sa.source(nt, nu, omega, 1e-4, 1e-6)
+            der = jax.grad(sa.source)(nt, nu, omega, 1e-4, 1e-6)
+            assert np.isfinite(val) and np.isfinite(der)
+    # Negative branch: the destruction term becomes a sink of negative values.
+    assert float(sa.source(-1e-6, nu, 0.0, 1e-4, 0.0)) > 0.0
+    # Production off in laminar regions: only destruction and c_b2 term remain.
+    full = float(sa.source(1e-5, nu, 1e3, 1e-3, 0.0))
+    off = float(sa.source(1e-5, nu, 1e3, 1e-3, 0.0, production_switch=0.0))
+    assert off < full
+
+
+def test_wall_distance_rectangle():
+    mesh = rectangle(8, 6, x=(0.0, 2.0), y=(0.0, 1.0), cell_type="quad")
+    d, nearest = mesh_wall_distance(mesh, mesh.boundary_faces["bottom"])
+    np.testing.assert_allclose(d, mesh.cell_centroid[:, 1])
+    assert np.all(np.isin(nearest, mesh.boundary_faces["bottom"]))
+    both = np.concatenate([mesh.boundary_faces[n] for n in ("bottom", "top")])
+    d2, _ = mesh_wall_distance(mesh, both)
+    y = mesh.cell_centroid[:, 1]
+    np.testing.assert_allclose(d2, np.minimum(y, 1.0 - y))
+    # Exact point-segment distance beyond the segment ends.
+    d3, i3 = wall_distance(
+        [[3.0, 1.0]], [[[0.0, 0.0], [1.0, 0.0]], [[2.0, 0.0], [2.5, 0.0]]]
+    )
+    assert d3[0] == pytest.approx(np.hypot(0.5, 1.0)) and i3[0] == 1
+
+
+def test_laminar_region_switch():
+    mesh = rectangle(10, 4, x=(-0.5, 1.5), y=(0.0, 1.0), cell_type="quad")
+    mesh = split_boundary(
+        mesh, "bottom", {"sym": lambda x, y: x < 0.0, "plate": lambda x, y: x >= 0.0}
+    )
+    conditions = {
+        "left": {"type": "velocity-inlet", "velocity": (1.0, 0.0)},
+        "right": {"type": "pressure-outlet", "pressure": 0.0},
+        "top": {"type": "farfield", "velocity": (1.0, 0.0), "pressure": 0.0},
+        "sym": {"type": "symmetry"},
+        "plate": {"type": "wall"},
+    }
+    model = inc.IncompressibleModel(density=1.0, viscosity=1e-3, turbulence="sa-neg")
+    problem = IncompressibleProblem(
+        mesh, model, conditions, laminar_regions=[{"boundary": "plate", "x_max": 0.5}]
+    )
+    switch = np.asarray(problem.geom.production_switch)
+    x = mesh.cell_centroid[:, 0]
+    assert np.all(switch[x > 0.6] == 1.0) and np.all(
+        switch[(x > 0.0) & (x < 0.4)] == 0.0
+    )
+    assert problem.initial_state((1.0, 0.0)).shape == (mesh.n_cells, 4)
+    with pytest.raises(ValueError, match="unknown boundary"):
+        IncompressibleProblem(
+            mesh, model, conditions, laminar_regions=[{"boundary": "x"}]
+        )
+
+
+def test_turbulence_value_forms():
+    nu = 1.5e-5
+    b = turbulence_values(
+        {"turbulent_viscosity_ratio": 0.2104, "intensity": 0.01}, nu, 10.0
+    )
+    assert b.chi == pytest.approx(3.0, abs=2e-3) and b.kinetic_energy == pytest.approx(
+        0.015
+    )
+    a = turbulence_values({"kinetic_energy": 0.015, "length_scale": 0.001}, nu, 10.0)
+    assert a.viscosity_ratio == pytest.approx(0.09**0.25 * np.sqrt(0.015) * 0.001 / nu)
+    assert a.intensity == pytest.approx(0.01)
+    c = turbulence_values({"nu_tilde_ratio": 5.0}, nu, 10.0)
+    assert c.chi == 5.0 and turbulence_values(None, nu, 10.0).chi == 3.0
+
+
+RANS_MINIMAL = {
+    "mesh": {"file": "m.su2"},
+    "physics": {"model": "rans"},
+    "fluid": {"density": 1.0, "viscosity": 1e-6},
+    "reference": {"velocity": 1.0},
+    "initial": {"velocity": [1.0, 0.0]},
+    "boundary": {
+        "left": {"type": "velocity-inlet", "velocity": [1.0, 0.0]},
+        "right": {"type": "pressure-outlet"},
+        "top": {"type": "farfield", "velocity": 1.0},
+        "bottom": {"type": "wall"},
+    },
+}
+
+
+def test_rans_config_rules():
+    cfg = resolve(RANS_MINIMAL)
+    assert cfg["physics"]["turbulence"] == "sa-neg"
+    assert cfg["solver"]["turbulence_coupling"] == "segregated"
+    raw = {
+        **RANS_MINIMAL,
+        "initial": {
+            "velocity": [1.0, 0.0],
+            "turbulence": {"nu_tilde_ratio": 3, "intensity": 0.1},
+        },
+    }
+    with pytest.raises(Exception, match="exactly one form"):
+        resolve(raw)
+    raw = {
+        **RANS_MINIMAL,
+        "physics": {"model": "rans", "transition": {"mode": "prescribed"}},
+    }
+    with pytest.raises(Exception, match="needs laminar_region"):
+        resolve(raw)
+    raw = {**RANS_MINIMAL, "physics": {"model": "laminar", "turbulence": "sa-neg"}}
+    assert any("ignored" in n for n in resolve(raw).notices)
+
+
+PLATE_TOML = """
+[case]
+name = "plate"
+[mesh]
+file = "plate.su2"
+[physics]
+model = "rans"
+[physics.transition]
+mode = "prescribed"
+laminar_region = [{ boundary = "plate", side = "upper", x_max = 0.05 }]
+[fluid]
+density = 1.2
+reynolds_number = 1.0e5
+[reference]
+velocity = 10.0
+length = 1.0
+[initial]
+from_boundary = "left"
+[boundary.left]
+type = "velocity-inlet"
+velocity = [10.0, 0.0]
+turbulence = { kinetic_energy = 0.0015, length_scale = 0.01 }
+[boundary.right]
+type = "pressure-outlet"
+[boundary.top]
+type = "farfield"
+velocity = 10.0
+[boundary.symmetry]
+type = "symmetry"
+[boundary.plate]
+type = "wall"
+[solver]
+residual_drop = 4.0
+[output]
+directory = "out"
+"""
+
+
+def test_run_case_rans(tmp_path):
+    from aerojax.cases.tmr_flat_plate import plate_mesh
+    from aerojax.mesh import write_su2
+
+    write_su2(tmp_path / "plate.su2", plate_mesh(24, 6, 24, reynolds=1.0e5))
+    (tmp_path / "plate.toml").write_text(PLATE_TOML)
+    result = run_case(tmp_path / "plate.toml", console=False)
+    assert result.converged and result.w.shape[1] == 4
+    log = (tmp_path / "out" / "plate.log").read_text()
+    assert "nu_tilde/nu" in log and "cells without SA production" in log
+    assert "outside the NASA TMR range" in log  # k, l form gives nu_tilde/nu > 5
+    wall = np.genfromtxt(
+        tmp_path / "out" / "plate.wall_plate.csv", delimiter=",", names=True
+    )
+    assert "y_plus" in wall.dtype.names and wall["y_plus"].max() < 2.0
+    assert "eddy_viscosity_ratio" in (tmp_path / "out" / "plate.vtu").read_text(
+        errors="ignore"
+    )

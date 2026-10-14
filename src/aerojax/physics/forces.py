@@ -40,13 +40,18 @@ class WallLoads(NamedTuple):
     traction: jnp.ndarray  # (n_bfaces, 2): tau . n
 
 
-@partial(jax.jit, static_argnums=0)
-def wall_loads(model, geom, bc, w):
-    """Pressure and viscous traction on every boundary face."""
+@partial(jax.jit, static_argnums=(0, 4))
+def wall_loads(model, geom, bc, w, boundary_state=boundary_state):
+    """Pressure and viscous traction on every boundary face.
+
+    ``w`` carries all variables of the model (3, or 4 with a turbulence
+    model, with the matching ``boundary_state``); the traction uses the
+    molecular viscosity (the eddy viscosity vanishes at walls).
+    """
     w_b = boundary_state(bc, geom.b_normal, w[geom.b_owner])
     grad = lsq_gradient(geom, w, w_b)
     g_b = boundary_face_gradient(geom, w, w_b, grad, model.viscous_gradient)
-    traction = -viscous_flux(model, g_b[:, 1:], geom.b_normal)[:, 1:]
+    traction = -viscous_flux(model, g_b[:, 1:3], geom.b_normal)[:, 1:]
     return WallLoads(w_b[:, P], traction)
 
 

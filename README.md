@@ -4,13 +4,14 @@
 Python/JAX, developed as a companion to
 [PyAero](https://github.com/chiefenne/PyAero).
 
-**Status:** stage 4 of the [stage plan](docs/requirements.md#7-stage-plan-d53):
-steady and unsteady laminar and inviscid incompressible flow with the SU2
-INC formulation, a Newton–Krylov solver and BDF2 dual time stepping,
-verified on Couette and Poiseuille flow, the lid-driven cavity (Ghia et
-al.), the inviscid cylinder, the Blasius flat plate, the Taylor–Green vortex
-and the DFG cylinder-in-channel benchmarks (steady 2D-1 and vortex shedding
-2D-2). Turbulence (stage 5) follows.
+**Status:** stage 5 of the [stage plan](docs/requirements.md#7-stage-plan-d53):
+steady and unsteady laminar, inviscid and RANS (Spalart–Allmaras, SA-neg)
+incompressible flow with the SU2 INC formulation, a Newton–Krylov solver and
+BDF2 dual time stepping, verified on Couette and Poiseuille flow, the
+lid-driven cavity (Ghia et al.), the inviscid cylinder, the Blasius flat
+plate, the Taylor–Green vortex, the DFG cylinder-in-channel benchmarks
+(steady 2D-1 and vortex shedding 2D-2) and the NASA TMR turbulent flat
+plate. The NACA 0012 with PyAero meshes (stage 6) follows.
 
 ## Documentation
 
@@ -50,6 +51,7 @@ python examples/stage1_convection_diffusion.py
 python examples/stage2_laminar.py [--re1000]
 python examples/stage3_benchmarks.py
 python examples/stage4_unsteady.py
+python examples/stage5_rans.py
 ```
 
 The examples write VTU files (for ParaView) and plots to `examples/output/`.

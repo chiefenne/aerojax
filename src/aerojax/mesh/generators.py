@@ -105,6 +105,34 @@ def rectangle(
     return _centroid_dual(nodes, triangles, boundary)
 
 
+def structured(xs, ys, names=("bottom", "right", "top", "left")):
+    """Quadrilateral mesh from grid-line coordinates ``xs`` (nx+1) and ``ys`` (ny+1).
+
+    Boundary names in the order bottom, right, top, left.
+    """
+    xs, ys = np.asarray(xs, dtype=float), np.asarray(ys, dtype=float)
+    nx, ny = xs.size - 1, ys.size - 1
+    nodes = _grid_nodes(xs, ys, 0.0, np.random.default_rng(0))
+    boundary = dict(zip(names, _rectangle_boundary_edges(nx, ny), strict=True))
+    return Mesh.from_cells(nodes, _quads(nx, ny), boundary)
+
+
+def geometric_growth(length, first, n):
+    """Growth ratio r so that n cells with first spacing ``first`` span ``length``."""
+    if n * first >= length:
+        return 1.0
+    lo, hi = 1.0, 2.0
+    while first * (hi**n - 1.0) / (hi - 1.0) < length:
+        hi *= 2.0
+    for _ in range(100):
+        r = 0.5 * (lo + hi)
+        if first * (r**n - 1.0) / (r - 1.0) < length:
+            lo = r
+        else:
+            hi = r
+    return 0.5 * (lo + hi)
+
+
 def _cluster(s, mode, beta):
     """Map uniform s in [0, 1] to a clustered distribution (tanh)."""
     if mode == "none":

@@ -56,6 +56,8 @@ class FVGeometry(NamedTuple):
     lsq_cell: jnp.ndarray
     lsq_src: jnp.ndarray
     lsq_coeff: jnp.ndarray
+    wall_distance: jnp.ndarray = None
+    production_switch: jnp.ndarray = None
 
 
 class Discretization(NamedTuple):

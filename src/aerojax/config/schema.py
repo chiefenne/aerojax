@@ -10,6 +10,18 @@ from typing import NamedTuple
 
 REQUIRED = object()
 
+TURBULENCE_DESCRIPTION = (
+    "Turbulence values (D33), one form: {turbulent_viscosity_ratio, intensity}, "
+    "{kinetic_energy, length_scale, c_mu} or {nu_tilde_ratio}; "
+    "default nu_tilde/nu = 3"
+)
+# Keys of the three input forms of a turbulence table.
+TURBULENCE_FORMS = {
+    "b": ("turbulent_viscosity_ratio", "intensity"),
+    "a": ("kinetic_energy", "length_scale", "c_mu"),
+    "c": ("nu_tilde_ratio",),
+}
+
 
 class Opt(NamedTuple):
     """One configuration option."""
@@ -33,8 +45,32 @@ SCHEMA = {
     },
     "physics": {
         "model": Opt(
-            "string", REQUIRED, "Governing equations", choices=("euler", "laminar")
+            "string",
+            REQUIRED,
+            "Governing equations",
+            choices=("euler", "laminar", "rans"),
         ),
+        "turbulence": Opt(
+            "string",
+            None,
+            "Turbulence model (rans); default sa-neg",
+            choices=("sa-neg",),
+        ),
+        "transition": {
+            "mode": Opt(
+                "string",
+                "none",
+                "none = fully turbulent; prescribed = laminar regions",
+                choices=("none", "prescribed"),
+            ),
+            "laminar_region": Opt(
+                "table_list",
+                None,
+                "Regions without turbulence production: tables with boundary, "
+                "optional side (upper/lower), x_min, x_max, y_min, y_max",
+                "m",
+            ),
+        },
         "mean_pressure_gradient": Opt(
             "float2",
             None,
@@ -59,6 +95,7 @@ SCHEMA = {
         "from_boundary": Opt(
             "string", None, "Uniform initial field equal to this boundary's state"
         ),
+        "turbulence": Opt("table", None, TURBULENCE_DESCRIPTION),
     },
     "reference": {
         "length": Opt(
@@ -123,6 +160,12 @@ SCHEMA = {
             choices=("alpha-damping", "edge-correction"),
         ),
         "alpha": Opt("float", 4.0 / 3.0, "alpha-damping coefficient", minimum=0.0),
+        "turbulence_spatial_order": Opt(
+            "int",
+            1,
+            "Spatial order of the turbulence equation (1: upwind)",
+            choices=(1, 2),
+        ),
         "first_order_iterations": Opt(
             "int",
             0,
@@ -229,7 +272,20 @@ SCHEMA = {
             "ilu_fill_factor": Opt(
                 "float", 20.0, "Fill factor of the incomplete LU", minimum=1.0
             ),
+            "ordering": Opt(
+                "string",
+                "mmd-at-plus-a",
+                "SuperLU column ordering; colamd for turbulence_coupling = coupled",
+                choices=("mmd-at-plus-a", "colamd"),
+            ),
         },
+        "turbulence_coupling": Opt(
+            "string",
+            "segregated",
+            "First-order Jacobian of RANS: segregated drops the mean-flow/"
+            "turbulence coupling blocks (Newton-Krylov is coupled in both)",
+            choices=("segregated", "coupled"),
+        ),
     },
     "time": {
         "mode": Opt("string", "steady", "Time mode", choices=("steady", "unsteady")),
@@ -292,6 +348,7 @@ BOUNDARY_TYPES = {
     "slip-wall": {},
     "velocity-inlet": {
         "velocity": Opt("float2", REQUIRED, "Inlet velocity (u, v)", "m/s"),
+        "turbulence": Opt("table", None, TURBULENCE_DESCRIPTION),
     },
     "pressure-outlet": {
         "pressure": Opt("float", 0.0, "Static gauge pressure", "Pa"),
@@ -301,6 +358,7 @@ BOUNDARY_TYPES = {
         "flow_direction": Opt(
             "float2", REQUIRED, "Flow direction (d_x, d_y), normalised internally"
         ),
+        "turbulence": Opt("table", None, TURBULENCE_DESCRIPTION),
     },
     "transpiration-wall": {
         "normal_velocity": Opt(
@@ -310,11 +368,13 @@ BOUNDARY_TYPES = {
             "negative = suction",
             "m/s",
         ),
+        "turbulence": Opt("table", None, TURBULENCE_DESCRIPTION),
     },
     "farfield": {
         "velocity": Opt("float", REQUIRED, "Freestream velocity magnitude", "m/s"),
         "angle_of_attack": Opt("float", 0.0, "Angle of attack", "deg"),
         "pressure": Opt("float", 0.0, "Freestream gauge pressure", "Pa"),
+        "turbulence": Opt("table", None, TURBULENCE_DESCRIPTION),
     },
     "periodic": {
         "partner": Opt("string", REQUIRED, "Name of the matching boundary faces"),
@@ -326,11 +386,6 @@ BOUNDARY_TYPES = {
 
 # Documented keys of later stages: rejected with a pointer to the stage.
 PLANNED = {
-    "physics.turbulence": "stage 5 (RANS)",
-    "physics.transition": "stage 5 (RANS)",
-    "solver.turbulence_coupling": "stage 5 (RANS)",
-    "numerics.turbulence_spatial_order": "stage 5 (RANS)",
     "initial.restart": "later",
-    "initial.turbulence": "stage 5 (RANS)",
 }
 PLANNED_BOUNDARY_TYPES = {}

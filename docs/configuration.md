@@ -1,6 +1,6 @@
 # aerojax – Case configuration
 
-**Status:** implemented for steady and unsteady laminar/Euler cases (stage 4). Keys of
+**Status:** implemented for steady and unsteady laminar, Euler and RANS (SA-neg) cases (stage 5). Keys of
 later stages are listed here for completeness and rejected by the validator
 with a pointer to the stage. The schema of record is
 `src/aerojax/config/schema.py`; `aerojax check case.toml` prints the resolved
@@ -196,7 +196,7 @@ case file (D42).
 | Key | Type | Default | Description | # |
 |-----|------|---------|-------------|---|
 | `mode` | `"none"` \| `"prescribed"` | `"none"` | `"none"` = fully turbulent | D15 |
-| `laminar_region` | array of tables | – | Regions where SA production is switched off. Exact form (e.g. `{ boundary = "airfoil", side = "upper", x_max = 0.35 }`) is settled in the transition stage | D15 |
+| `laminar_region` | array of tables | – | Regions where SA production is switched off, e.g. `[{ boundary = "airfoil", side = "upper", x_max = 0.35 }]`: cells whose nearest wall face belongs to `boundary` (required), optionally only on one `side` (`"upper"`: the fluid lies above the wall, `"lower"`: below) and within `x_min`, `x_max`, `y_min`, `y_max` (m) | D15 |
 
 ### `[fluid]`
 
@@ -319,8 +319,8 @@ Needed for force and moment coefficients, and for `fluid.reynolds_number`.
 | `residual_drop` | float | `8.0` | Convergence: orders of magnitude of residual reduction | |
 | `cfl` | table | `{ start = 10.0, max = 1.0e10, growth_factor = 2.0, cut_factor = 0.1, reject_factor = 10.0, explicit = 1.0 }` | Pseudo-time CFL number: SER control with at least `growth_factor` per accepted iteration. An update is rejected (and the CFL multiplied by `cut_factor`) if the linear solve fails, the update is not finite, or the residual grows by more than `reject_factor`. `explicit` is the CFL of the explicit Runge–Kutta mode | D35 |
 | `newton_krylov` | table | `{ enabled = true, switch_at_residual_drop = 2.0, linear_tolerance = 1e-2, restart = 50, max_iterations = 200, refactor_interval = 1 }` | Switch from approximate-Jacobian iterations to Newton–Krylov once the residual has dropped by the given orders; GMRES on the exact Jacobian (`jax.jvp`) preconditioned by the factorized first-order system. `refactor_interval = n` rebuilds the preconditioner only every n-th Newton step (more GMRES iterations, fewer factorizations) | D25 |
-| `linear_solver` | table | `{ type = "direct", tolerance = 1e-6, restart = 50, max_iterations = 500, ilu_drop_tolerance = 1e-5, ilu_fill_factor = 20 }` | `"direct"`: sparse LU (SciPy SuperLU). `"gmres-ilu"`: GMRES with an incomplete LU; the ILU options set its accuracy and memory (fill 3–5× with drop 1e-3 / fill 5, close to the exact LU with the defaults). Both also precondition Newton–Krylov | D32 |
-| `turbulence_coupling` | `"segregated"` \| `"coupled"` | `"segregated"` | `"segregated"`: mean flow and turbulence equations solved one after the other per iteration; `"coupled"`: one system for all variables | D34 |
+| `linear_solver` | table | `{ type = "direct", tolerance = 1e-6, restart = 50, max_iterations = 500, ilu_drop_tolerance = 1e-5, ilu_fill_factor = 20, ordering = "mmd-at-plus-a" }` | `"direct"`: sparse LU (SciPy SuperLU). `"gmres-ilu"`: GMRES with an incomplete LU; the ILU options set its accuracy and memory (fill 3–5× with drop 1e-3 / fill 5, close to the exact LU with the defaults). Both also precondition Newton–Krylov. `ordering`: SuperLU column ordering, `"mmd-at-plus-a"` (least fill for the mean-flow Jacobian) or `"colamd"` | D32 |
+| `turbulence_coupling` | `"segregated"` \| `"coupled"` | `"segregated"` | First-order Jacobian of RANS runs: `"segregated"` drops the mean-flow/turbulence coupling blocks (mean flow and ν̃ updated from the same state, as in SU2's segregated solver), `"coupled"` keeps them. The Newton–Krylov phase uses the exact coupled Jacobian-vector products in both. On the flat plate the coupled Jacobian needs more iterations and a 100× larger LU fill with the default ordering: use `linear_solver.ordering = "colamd"` with it | D34 |
 
 ### `[time]`
 
@@ -341,10 +341,10 @@ The other `[solver]` settings (CFL control, Newton–Krylov, linear solver) appl
 | Key | Type | Default | Description | # |
 |-----|------|---------|-------------|---|
 | `directory` | path | `"results"` | Relative to the case file | |
-| `formats` | array | `["vtu"]` | Field output; `"vtu"` (series as PVD for unsteady runs) | D45 |
+| `formats` | array | `["vtu"]` | Field output; `"vtu"` (series as PVD for unsteady runs): pressure, velocity, velocity magnitude and, with a turbulence model, ν̃ and ν_t/ν | D45 |
 | `interval` | int | `0` | Write every n iterations / time steps; 0 = only at the end | |
 | `verbosity` | `"normal"` \| `"detailed"` | `"normal"` | `"detailed"` also logs the inner iterations of unsteady runs | D45 |
-| `force_boundaries` | array of strings | all wall boundaries | Boundary faces over which forces and moments are integrated (walls, transpiration walls; slip walls allowed, and included by default in Euler mode); C_L, C_D, C_M per iteration in the log and history, and a wall CSV (x, y, p, Cp, τ_x, τ_y, Cf) per boundary at the end. Forces are those of the fluid on the wall; Cf uses the face tangent oriented counter-clockwise with respect to the fluid (+x on a bottom wall) | D45 |
+| `force_boundaries` | array of strings | all wall boundaries | Boundary faces over which forces and moments are integrated (walls, transpiration walls; slip walls allowed, and included by default in Euler mode); C_L, C_D, C_M per iteration in the log and history, and a wall CSV (x, y, p, Cp, τ_x, τ_y, Cf, and y⁺ of the first cell centre with a turbulence model) per boundary at the end. Forces are those of the fluid on the wall; Cf uses the face tangent oriented counter-clockwise with respect to the fluid (+x on a bottom wall) | D45 |
 | `history` | bool | `true` | Residuals and coefficients as CSV and in the `.log` file: per pseudo-time iteration (steady) or per physical time step (unsteady) | D45 |
 
 

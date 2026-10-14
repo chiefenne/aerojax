@@ -1,6 +1,30 @@
 # Changelog
 
-## 0.4 – Stage 4: unsteady flow (not yet tagged)
+## 0.5 – Stage 5: RANS with the SA-neg model (not yet tagged)
+
+- Spalart–Allmaras, negative variant (NASA TMR SA-neg, with f_t2 and the
+  modified S̃), as fourth variable ν̃ of the coupled state (D11, D13):
+  upwind convection with the face-average velocity, α-damping diffusion,
+  cell sources with AD-safe formulation; eddy viscosity in the mean-flow
+  viscous flux; ν̃ = 0 at walls, prescribed at inflow faces.
+- Wall distance of every cell centre (KD-tree candidates, exact
+  point-segment distance) with the nearest wall face.
+- Segregated/coupled first-order Jacobian (D34), Newton–Krylov coupled in
+  both; `linear_solver.ordering` option. Default segregated confirmed on the
+  flat plate (coupled: 2× the iterations, 10× the LU time).
+- Prescribed transition (D15): `physics.transition.laminar_region` by
+  boundary, side and x/y bounds; SA production switched off there.
+- Turbulence inputs (D33): `turbulence` tables in `[initial]` and at inflow
+  boundaries in the three forms (ν_t/ν + Tu, k + ℓ, ν̃/ν), equivalent values
+  reported in the log, warning outside the TMR range ν̃/ν = 3–5; y⁺ in the
+  wall CSV, ν̃ and ν_t/ν in the VTU output.
+- Verification R1: turbulent flat plate on the TMR domain, C_f(0.97) +1.0 %
+  and C_D +1.7 % vs the TMR SA values on 7.7k cells (+0.9 / +1.4 % on 23k),
+  u⁺(y⁺) follows the log law. GMRES-ILU verified on the 23k-cell plate.
+- Examples: `examples/stage5_rans.py`, TOML case
+  `examples/cases/flat_plate_rans.toml`.
+
+## 0.4 – Stage 4: unsteady flow (2026-10-14)
 
 - Dual time stepping (D9, D37): BDF2 (BDF1 for the first step, or
   throughout) with the steady solver as inner iteration — extrapolated start

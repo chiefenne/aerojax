@@ -88,6 +88,14 @@ class IncompressibleModel(NamedTuple):
         ``(cell, pressure)``: the continuity residual of that cell is replaced
         by p_cell - pressure (D39 R2), used when no boundary fixes the
         pressure level.
+    turbulence : {"none", "sa-neg"}
+        Turbulence model (D11); "sa-neg" adds nu_tilde as fourth variable
+        (see :mod:`aerojax.physics.rans`).
+    turbulence_spatial_order : int
+        1 or 2: convective states of the turbulence equation.
+    coupling : {"segregated", "coupled"}
+        Mean-flow/turbulence coupling of the first-order Jacobian (D34):
+        "segregated" drops the cross-coupling blocks.
     """
 
     density: float = 1.0
@@ -100,6 +108,14 @@ class IncompressibleModel(NamedTuple):
     alpha: float = 4.0 / 3.0
     body_force: tuple = (0.0, 0.0)
     pin: tuple = None
+    turbulence: str = "none"
+    turbulence_spatial_order: int = 1
+    coupling: str = "segregated"
+
+    @property
+    def n_var(self):
+        """Number of variables: 3, or 4 with a turbulence model."""
+        return 4 if self.turbulence != "none" else 3
 
 
 def _density(bc):
@@ -119,11 +135,14 @@ class BoundaryData(NamedTuple):
         inlet use (u, v); pressure outlet uses p; farfield uses all three;
         total-pressure inlet stores (p_total, d_x, d_y) with the unit flow
         direction d.
+    nu_tilde : float array, shape (n_bfaces,) or None
+        Prescribed SA working variable at inflow faces (zero elsewhere).
     """
 
     kind: jnp.ndarray
     value: jnp.ndarray
     density: float = 1.0
+    nu_tilde: jnp.ndarray = None
 
 
 def boundary_data(disc, conditions, density=1.0):
@@ -148,6 +167,7 @@ def boundary_data(disc, conditions, density=1.0):
     nb = disc.boundary_face_ids.size
     kind = np.zeros(nb, dtype=np.int64)
     value = np.zeros((nb, 3))
+    nu_tilde = np.zeros(nb)
     missing = set(disc.boundary_slices) - set(conditions)
     extra = set(conditions) - set(disc.boundary_slices)
     if missing or extra:
@@ -181,7 +201,12 @@ def boundary_data(disc, conditions, density=1.0):
         value[sl, U] = np.broadcast_to(np.asarray(vel[0], dtype=float), x.shape)
         value[sl, V] = np.broadcast_to(np.asarray(vel[1], dtype=float), x.shape)
         value[sl, P] = np.broadcast_to(_evaluate(pres, x, y), x.shape)
-    return BoundaryData(jnp.asarray(kind), jnp.asarray(value), float(density))
+        nu_tilde[sl] = np.broadcast_to(
+            _evaluate(bc.get("nu_tilde", 0.0), x, y), x.shape
+        )
+    return BoundaryData(
+        jnp.asarray(kind), jnp.asarray(value), float(density), jnp.asarray(nu_tilde)
+    )
 
 
 def _evaluate(spec, x, y):
@@ -189,23 +214,24 @@ def _evaluate(spec, x, y):
     return np.asarray(spec(x, y) if callable(spec) else spec, dtype=float)
 
 
-def lsq_include(conditions):
+def lsq_include(conditions, n_var=3):
     """Return the ``lsq_include`` callback for :func:`build_geometry`.
 
     A boundary face takes part in a variable's gradient only where its value
     is known: velocity at walls, velocity inlets and total-pressure inlets,
     pressure at pressure outlets, everything at farfield and symmetry faces
-    (symmetry values are the mirrored cell values).
+    (symmetry values are the mirrored cell values). The turbulence variable
+    (``n_var`` = 4) follows the velocity.
     """
 
     def include(slices, n_bfaces):
-        mask = np.ones((n_bfaces, 3), dtype=bool)
+        mask = np.ones((n_bfaces, n_var), dtype=bool)
         for name, sl in slices.items():
             k = KIND_NAMES[conditions[name]["type"]]
             if k in (WALL, VELOCITY_INLET, TOTAL_PRESSURE_INLET):
                 mask[sl, P] = False
             elif k == PRESSURE_OUTLET:
-                mask[sl, U] = mask[sl, V] = False
+                mask[sl, U:] = False
         return mask
 
     return include
@@ -335,11 +361,15 @@ def fds_flux(model, w_l, w_r, normal, beta2):
     return central - 0.5 * diss
 
 
-def viscous_flux(model, grad_v, normal):
-    """-(0, tau.n) for velocity gradients grad_v (n, 2, 2) [var, dir]."""
-    mu = model.viscosity
+def viscous_flux(model, grad_v, normal, mu=None):
+    """-(0, tau.n) for velocity gradients grad_v (n, 2, 2) [var, dir].
+
+    ``mu``: per-face effective viscosity (array), default ``model.viscosity``.
+    """
+    mu = model.viscosity if mu is None else jnp.asarray(mu)
+    mu3 = mu if jnp.ndim(mu) == 0 else mu[:, None, None]
     div = grad_v[:, 0, 0] + grad_v[:, 1, 1]
-    tau = mu * (grad_v + jnp.swapaxes(grad_v, 1, 2))
+    tau = mu3 * (grad_v + jnp.swapaxes(grad_v, 1, 2))
     tau = tau - (2.0 / 3.0 * mu * div)[:, None, None] * jnp.eye(2)[None]
     tn = jnp.einsum("nij,nj->ni", tau, normal)
     return -jnp.concatenate((jnp.zeros((tn.shape[0], 1)), tn), axis=1)

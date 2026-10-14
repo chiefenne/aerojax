@@ -59,8 +59,8 @@ def test_unknown_section_and_boundary_type():
 def test_planned_keys_are_named():
     msg = problems({**MINIMAL, "initial": {"velocity": [0.0, 0.0], "restart": "x"}})
     assert "planned for later" in msg
-    raw = {**MINIMAL, "physics": {"model": "laminar", "turbulence": "sa-neg"}}
-    assert "planned for stage 5" in problems(raw)
+    raw = {**MINIMAL, "physics": {"model": "laminar", "turbulence": "sst"}}
+    assert "is not one of" in problems(raw)
 
 
 def test_required_and_types():

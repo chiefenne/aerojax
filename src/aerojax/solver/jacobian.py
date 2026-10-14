@@ -31,7 +31,9 @@ def _face_blocks(geom, interior_flux, boundary_flux, u, params, b_args):
     return d_o * fl, d_n * fl, d_b * geom.b_length[:, None, None]
 
 
-def first_order_jacobian(geom, interior_flux, boundary_flux, u, params=None, b_args=()):
+def first_order_jacobian(
+    geom, interior_flux, boundary_flux, u, params=None, b_args=(), block_mask=None
+):
     """Assemble dR1/du of the compact first-order residual.
 
     Parameters
@@ -54,6 +56,9 @@ def first_order_jacobian(geom, interior_flux, boundary_flux, u, params=None, b_a
     b_args : tuple of arrays
         Per-boundary-face arrays (first axis n_bfaces) passed to
         ``boundary_flux``; held fixed in the derivative.
+    block_mask : array (n_var, n_var), optional
+        Multiplies every flux block, e.g. to drop cross-coupling entries
+        (segregated turbulence coupling, D34).
 
     Returns
     -------
@@ -68,6 +73,8 @@ def first_order_jacobian(geom, interior_flux, boundary_flux, u, params=None, b_a
     block_rows = np.concatenate((o, o, n, n, b))
     block_cols = np.concatenate((o, n, o, n, b))
     blocks = np.concatenate((d_o, d_n, -d_o, -d_n, d_b))
+    if block_mask is not None:
+        blocks = blocks * np.asarray(block_mask, dtype=float)[None]
 
     k = np.arange(n_var)
     rows = (block_rows[:, None, None] * n_var + k[None, :, None]).repeat(n_var, 2)

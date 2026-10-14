@@ -12,6 +12,7 @@ from aerojax.config.schema import (
     PLANNED_BOUNDARY_TYPES,
     REQUIRED,
     SCHEMA,
+    TURBULENCE_FORMS,
     Opt,
 )
 
@@ -213,6 +214,41 @@ def _resolve_boundary(name, values, explicit, problems):
     return out
 
 
+LAMINAR_REGION_KEYS = ("boundary", "side", "x_min", "x_max", "y_min", "y_max")
+
+
+def _turbulence_table(holder, dotted, problems):
+    """Check a turbulence table (D33): exactly one of the three forms."""
+    table = holder.get("turbulence")
+    if table is None:
+        return
+    dotted += ".turbulence"
+    forms = [f for f, keys in TURBULENCE_FORMS.items() if any(k in table for k in keys)]
+    allowed = tuple(k for keys in TURBULENCE_FORMS.values() for k in keys)
+    for key in table:
+        if key not in allowed:
+            problems.append(_unknown(dotted + " key", key, allowed))
+            return
+    if len(forms) != 1:
+        problems.append(
+            f"{dotted}: give exactly one form, {{turbulent_viscosity_ratio, "
+            "intensity}, {kinetic_energy, length_scale, c_mu} or {nu_tilde_ratio}"
+        )
+        return
+    form = forms[0]
+    required = {
+        "a": ("kinetic_energy", "length_scale"),
+        "b": ("turbulent_viscosity_ratio",),
+        "c": ("nu_tilde_ratio",),
+    }[form]
+    for key in required:
+        if key not in table:
+            problems.append(f"{dotted}: {key} is required")
+    for key, value in table.items():
+        if not isinstance(value, int | float) or isinstance(value, bool) or value < 0:
+            problems.append(f"{dotted}.{key}: expected a number >= 0, got {value!r}")
+
+
 def _check_value(dotted, opt, value, problems):
     ok = True
     if opt.type == "float":
@@ -235,8 +271,17 @@ def _check_value(dotted, opt, value, problems):
         value = [float(v) for v in value] if ok else value
     elif opt.type == "string_list":
         ok = isinstance(value, list) and all(isinstance(v, str) for v in value)
+    elif opt.type == "table":
+        ok = isinstance(value, dict)
+    elif opt.type == "table_list":
+        ok = isinstance(value, list) and all(isinstance(v, dict) for v in value)
     if not ok:
-        kind = {"float2": "array of two numbers", "string_list": "array of strings"}
+        kind = {
+            "float2": "array of two numbers",
+            "string_list": "array of strings",
+            "table": "table",
+            "table_list": "array of tables",
+        }
         problems.append(
             f"{dotted}: expected {kind.get(opt.type, opt.type)}, got {value!r}"
         )
@@ -268,6 +313,47 @@ def _consistency(data, explicit, problems, notices, path):
                 )
             if partner == name:
                 problems.append(f"boundary.{name}: periodic partner is itself")
+
+    # RANS: turbulence model, transition regions, turbulence tables.
+    rans = physics["model"] == "rans"
+    if rans and physics["turbulence"] is None:
+        physics["turbulence"] = "sa-neg"
+    elif not rans and physics["turbulence"] is not None:
+        notices.append("physics.turbulence ignored: physics.model is not rans")
+    tr = physics["transition"]
+    if tr["mode"] == "prescribed":
+        if not rans:
+            problems.append("physics.transition needs physics.model = rans")
+        if not tr["laminar_region"]:
+            problems.append("physics.transition.mode = prescribed needs laminar_region")
+        for i, region in enumerate(tr["laminar_region"] or []):
+            dotted = f"physics.transition.laminar_region[{i}]"
+            for key in region:
+                if key not in LAMINAR_REGION_KEYS:
+                    problems.append(_unknown(dotted + " key", key, LAMINAR_REGION_KEYS))
+            if "boundary" not in region:
+                problems.append(f"{dotted}: boundary is required")
+            elif region["boundary"] not in boundaries:
+                problems.append(
+                    _unknown(dotted + ".boundary", region["boundary"], boundaries)
+                )
+            if region.get("side") not in (None, "upper", "lower"):
+                problems.append(f"{dotted}.side: must be 'upper' or 'lower'")
+    elif tr["laminar_region"]:
+        notices.append("physics.transition.laminar_region ignored: mode = none")
+    if rans:
+        _turbulence_table(data["initial"], "initial", problems)
+        for name, b in boundaries.items():
+            if "turbulence" in b:
+                _turbulence_table(b, f"boundary.{name}", problems)
+    else:
+        for holder, dotted in [(data["initial"], "initial")] + [
+            (b, f"boundary.{n}") for n, b in boundaries.items()
+        ]:
+            if holder.get("turbulence") is not None:
+                notices.append(
+                    f"{dotted}.turbulence ignored: physics.model is not rans"
+                )
 
     # Unsteady runs need the time step and the final time.
     tm = data["time"]
@@ -404,4 +490,7 @@ def _toml_value(value):
         return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
     if isinstance(value, list | tuple | np.ndarray):
         return "[" + ", ".join(_toml_value(v) for v in value) + "]"
+    if isinstance(value, dict):
+        items = ", ".join(f"{k} = {_toml_value(v)}" for k, v in value.items())
+        return "{ " + items + " }"
     raise TypeError(f"cannot serialise {value!r}")

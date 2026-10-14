@@ -15,11 +15,12 @@ import numpy as np
 
 from aerojax import __version__
 from aerojax.config import Resolved, load_case
-from aerojax.driver import IncompressibleProblem
+from aerojax.driver import INFLOW_TYPES, IncompressibleProblem
 from aerojax.io import HistoryWriter, RunLog, StepHistoryWriter, write_pvd, write_vtu
 from aerojax.mesh import Mesh, read_su2
 from aerojax.physics import forces as fz
 from aerojax.physics import incompressible as inc
+from aerojax.physics import spalart_allmaras as sa
 from aerojax.solver import DualTimeSettings, LinearSettings, PseudoTimeSettings
 
 
@@ -50,7 +51,8 @@ class RunResult(NamedTuple):
     mesh : Mesh
         The mesh in physical units.
     w : ndarray, shape (n_cells, 3)
-        (p, u, v) in physical units.
+        (p, u, v) in physical units, plus nu_tilde (m^2/s) with a turbulence
+        model.
     converged : bool
     history : dict
     output_dir : Path
@@ -65,6 +67,59 @@ class RunResult(NamedTuple):
     history: dict
     output_dir: Path
     coefficients: object = None
+
+
+class TurbulenceValues(NamedTuple):
+    """Equivalent turbulence values of one input table (D33), SI units."""
+
+    chi: float  # nu_tilde / nu
+    viscosity_ratio: float  # nu_t / nu
+    kinetic_energy: float = None  # m^2/s^2
+    length_scale: float = None  # m
+    intensity: float = None  # Tu as a fraction
+
+    def report(self):
+        """Log line: equivalent values."""
+        text = f"nu_t/nu = {self.viscosity_ratio:.4g}, nu_tilde/nu = {self.chi:.4g}"
+        if self.kinetic_energy is not None:
+            text += f", k = {self.kinetic_energy:.4g} m^2/s^2"
+        if self.length_scale is not None:
+            text += f", l = {self.length_scale:.4g} m"
+        if self.intensity is not None:
+            text += f", Tu = {100 * self.intensity:.3g} %"
+        return text
+
+
+def turbulence_values(table, nu, velocity):
+    """Convert a turbulence table to the SA working variable (D33).
+
+    Parameters
+    ----------
+    table : dict or None
+        One of the three forms; None gives nu_tilde / nu = 3.
+    nu : float
+        Kinematic viscosity in m^2/s.
+    velocity : float
+        Local velocity magnitude in m/s (for Tu <-> k).
+    """
+    if table is None:
+        chi = 3.0
+        return TurbulenceValues(chi, float(sa.eddy_viscosity_ratio(chi)))
+    if "nu_tilde_ratio" in table:
+        chi = float(table["nu_tilde_ratio"])
+        return TurbulenceValues(chi, float(sa.eddy_viscosity_ratio(chi)))
+    if "kinetic_energy" in table:
+        k, ell = table["kinetic_energy"], table["length_scale"]
+        c_mu = table.get("c_mu", 0.09)
+        ratio = c_mu**0.25 * math.sqrt(k) * ell / nu
+        chi = float(sa.nu_tilde_from_eddy_viscosity(ratio))
+        tu = math.sqrt(2.0 * k / 3.0) / velocity if velocity > 0.0 else None
+        return TurbulenceValues(chi, ratio, k, ell, tu)
+    ratio = table["turbulent_viscosity_ratio"]
+    chi = float(sa.nu_tilde_from_eddy_viscosity(ratio))
+    tu = table.get("intensity")
+    k = 1.5 * (tu * velocity) ** 2 if tu is not None else None
+    return TurbulenceValues(chi, ratio, k, None, tu)
 
 
 def setup(config, mesh=None):
@@ -99,6 +154,9 @@ def setup(config, mesh=None):
     else:
         mu_nd = 1.0 / fluid["reynolds_number"]
     rho_nd = fluid["density"] / scaling.density
+    rans = physics["model"] == "rans"
+    nu_si = mu_nd * scaling.viscosity / fluid["density"]  # m^2/s
+    turbulence = {}  # reported values per inflow boundary and "initial"
 
     conditions = {}
     for name, b in cfg["boundary"].items():
@@ -123,6 +181,16 @@ def setup(config, mesh=None):
             entry["flow_direction"] = tuple(b["flow_direction"])
         elif kind == "transpiration-wall":
             entry["normal_velocity"] = b["normal_velocity"] / scaling.velocity
+        if rans and kind in INFLOW_TYPES:
+            if kind == "farfield":
+                speed = b["velocity"]
+            elif kind == "velocity-inlet":
+                speed = math.hypot(*b["velocity"])
+            else:
+                speed = scaling.velocity
+            tv = turbulence_values(b.get("turbulence"), nu_si, speed)
+            turbulence[name] = tv
+            entry["nu_tilde"] = tv.chi * mu_nd / rho_nd
         conditions[name] = entry
 
     num = cfg["numerics"]
@@ -140,7 +208,23 @@ def setup(config, mesh=None):
         viscous_gradient=num["viscous_gradient"],
         alpha=num["alpha"],
         body_force=force,
+        turbulence=physics["turbulence"] if rans else "none",
+        turbulence_spatial_order=num["turbulence_spatial_order"],
+        coupling=cfg["solver"]["turbulence_coupling"],
     )
+    regions = None
+    if rans and physics["transition"]["mode"] == "prescribed":
+        regions = [
+            {
+                k: (
+                    v / scaling.length
+                    if k in ("x_min", "x_max", "y_min", "y_max")
+                    else v
+                )
+                for k, v in region.items()
+            }
+            for region in physics["transition"]["laminar_region"]
+        ]
     nd_mesh = _scaled_mesh(mesh, 1.0 / scaling.length)
     point = ref["pressure_point"]
     problem = IncompressibleProblem(
@@ -152,16 +236,27 @@ def setup(config, mesh=None):
         if point is None
         else tuple(p / scaling.length for p in point),
         pin_pressure=cfg["initial"]["pressure"] / scaling.pressure,
+        laminar_regions=regions,
     )
 
     init = cfg["initial"]
+    nu_tilde = None
     if init["from_boundary"] is not None:
         src = conditions[init["from_boundary"]]
         velocity, pressure = src["velocity"], src.get("pressure", 0.0)
+        nu_tilde = src.get("nu_tilde")
+        if rans and init["turbulence"] is None and init["from_boundary"] in turbulence:
+            turbulence["initial"] = turbulence[init["from_boundary"]]
     else:
         velocity = tuple(v / scaling.velocity for v in init["velocity"])
         pressure = init["pressure"] / scaling.pressure
-    w0 = problem.initial_state(velocity, pressure)
+    if rans and "initial" not in turbulence:
+        speed = math.hypot(*velocity) * scaling.velocity
+        tv = turbulence_values(init["turbulence"], nu_si, speed)
+        turbulence["initial"] = tv
+        nu_tilde = tv.chi * mu_nd / rho_nd
+    w0 = problem.initial_state(velocity, pressure, nu_tilde)
+    problem.turbulence_values = turbulence
     return problem, scaling, w0, mesh
 
 
@@ -201,7 +296,10 @@ def run_case(path, console=True, mesh=None):
             result, coefficients = _run_steady(
                 log, config, problem, scaling, w0, mesh, out_dir
             )
-    w = result.u * np.array([scaling.pressure, scaling.velocity, scaling.velocity])
+    scale = [scaling.pressure, scaling.velocity, scaling.velocity]
+    if problem.turbulent:
+        scale.append(scaling.viscosity / scaling.density)
+    w = result.u * np.array(scale)
     return RunResult(
         config, mesh, w, result.converged, result.history, out_dir, coefficients
     )
@@ -257,7 +355,7 @@ def _run_steady(log, config, problem, scaling, w0, mesh, out_dir):
         log.iteration(it, residuals, cfl, accepted, extra, info.pop("note", ""))
         history.row(it, residuals, cfl, accepted, log.elapsed, nk, lin, coeffs)
         if interval and it and it % interval == 0:
-            _write_fields(out_dir / f"{name}_{it:06d}.vtu", mesh, w, scaling)
+            _write_fields(out_dir / f"{name}_{it:06d}.vtu", mesh, w, scaling, problem)
 
     callback.info = {}
 
@@ -282,7 +380,7 @@ def _run_steady(log, config, problem, scaling, w0, mesh, out_dir):
         )
     history.close()
 
-    _write_fields(out_dir / f"{name}.vtu", mesh, result.u, scaling)
+    _write_fields(out_dir / f"{name}.vtu", mesh, result.u, scaling, problem)
     h = result.history
     log.section("Summary")
     nk_steps = int(np.count_nonzero(h["newton_krylov"]))
@@ -333,7 +431,7 @@ def _run_unsteady(log, config, problem, scaling, w0, mesh, out_dir):
 
     def write_series(step, t, w):
         file = f"{name}_{step:06d}.vtu"
-        _write_fields(out_dir / file, mesh, w, scaling)
+        _write_fields(out_dir / file, mesh, w, scaling, problem)
         series.append((t * t_scale, file))
         write_pvd(out_dir / f"{name}.pvd", series)
 
@@ -393,7 +491,7 @@ def _run_unsteady(log, config, problem, scaling, w0, mesh, out_dir):
     n_steps = int(result.history["step"][-1]) if result.history["step"].size else 0
     if not interval or n_steps % interval:
         write_series(n_steps, result.time, result.u)
-    _write_fields(out_dir / f"{name}.vtu", mesh, result.u, scaling)
+    _write_fields(out_dir / f"{name}.vtu", mesh, result.u, scaling, problem)
     h = result.history
     log.section("Summary")
     rows = [
@@ -472,6 +570,15 @@ class Monitor:
             "tau_y": d["tau_y"] * s.pressure,
             "cf": d["cf"],
         }
+        if self.problem.turbulent:
+            # y+ of the first cell centre: d sqrt(|tau_w| / rho) / nu (non-dim.).
+            m = self.problem.model
+            owner = np.asarray(self.problem.geom.b_owner)[faces]
+            dist = np.asarray(self.problem.geom.wall_distance)[owner]
+            tau_w = np.hypot(d["tau_x"], d["tau_y"])
+            columns["y_plus"] = (
+                dist * np.sqrt(tau_w / m.density) / (m.viscosity / m.density)
+            )
         header = ",".join(columns)
         rows = np.column_stack(list(columns.values()))
         np.savetxt(path, rows, delimiter=",", header=header, comments="", fmt="%.10e")
@@ -487,18 +594,21 @@ def _scaled_mesh(mesh, factor):
     return Mesh.from_cells(mesh.nodes * factor, cells, boundary)
 
 
-def _write_fields(path, mesh, w_nd, scaling):
+def _write_fields(path, mesh, w_nd, scaling, problem=None):
     p = w_nd[:, 0] * scaling.pressure
-    vel = w_nd[:, 1:] * scaling.velocity
-    write_vtu(
-        path,
-        mesh,
-        cell_data={
-            "pressure": p,
-            "velocity": vel,
-            "velocity_magnitude": np.hypot(vel[:, 0], vel[:, 1]),
-        },
-    )
+    vel = w_nd[:, 1:3] * scaling.velocity
+    data = {
+        "pressure": p,
+        "velocity": vel,
+        "velocity_magnitude": np.hypot(vel[:, 0], vel[:, 1]),
+    }
+    if problem is not None and problem.turbulent:
+        nu_scale = scaling.viscosity / scaling.density  # m^2/s
+        data["nu_tilde"] = w_nd[:, 3] * nu_scale
+        data["eddy_viscosity_ratio"] = problem.eddy_viscosity(w_nd) / (
+            problem.model.viscosity / problem.model.density
+        )
+    write_vtu(path, mesh, cell_data=data)
 
 
 def _log_setup(log, config, problem, scaling, mesh):
@@ -535,6 +645,22 @@ def _log_setup(log, config, problem, scaling, mesh):
         log.write("  " + line)
     log.section("Boundary conditions")
     log.table([(name, _describe_boundary(b)) for name, b in cfg["boundary"].items()])
+    if problem.turbulent:
+        log.section("Turbulence")
+        tv = problem.turbulence_values
+        rows = [("model", cfg["physics"]["turbulence"])]
+        rows += [(name, tv[name].report()) for name in tv]
+        if cfg["physics"]["transition"]["mode"] == "prescribed":
+            n_off = int(
+                np.count_nonzero(np.asarray(problem.geom.production_switch) == 0)
+            )
+            rows.append(("laminar regions", f"{n_off} cells without SA production"))
+        log.table(rows)
+        for name, v in tv.items():
+            if not 0.99 * 3.0 <= v.chi <= 1.01 * 5.0:
+                config.notices.append(
+                    f"{name}: nu_tilde/nu = {v.chi:.3g} outside the NASA TMR range 3-5"
+                )
     if problem.pinned_cell is not None:
         c = mesh.cell_centroid[problem.pinned_cell]
         config.notices.append(
