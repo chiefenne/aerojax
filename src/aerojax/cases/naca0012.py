@@ -66,25 +66,26 @@ def solve(
     mesh=None,
     callback=None,
     switch_iteration=40,
+    vortex_correction=False,
 ):
     """Run the NACA 0012 at the angle of attack ``alpha`` (degrees).
 
     ``w0`` restarts from a previous state (e.g. the next angle); ``mesh``
-    replaces the generated O-grid (e.g. a PyAero mesh with boundaries
-    "airfoil" and "farfield").
+    replaces the generated O-grid (e.g. a PyAero mesh: boundary "airfoil",
+    all others farfield); ``vortex_correction`` applies the point-vortex
+    farfield correction (P10) for near farfields.
     """
     mesh = (
         naca0012_ogrid(n_surface, n_radial, reynolds=reynolds) if mesh is None else mesh
     )
     a = np.radians(alpha)
-    conditions = {
-        "airfoil": {"type": "wall"},
-        "farfield": {
-            "type": "farfield",
-            "velocity": (np.cos(a), np.sin(a)),
-            "pressure": 0.0,
-        },
-    }
+    # Every boundary except the airfoil is a farfield (PyAero meshes name
+    # them inlet, outlet, top, bottom).
+    farfield = {"type": "farfield", "velocity": (np.cos(a), np.sin(a)), "pressure": 0.0}
+    conditions = {"airfoil": {"type": "wall"}}
+    conditions.update(
+        {n: dict(farfield) for n in mesh.boundary_faces if n != "airfoil"}
+    )
     # Local Venkatakrishnan limiter: the global-range threshold leaves the
     # thin near-wall cells unlimited and diverges on the curved nose (D23);
     # the limiter is frozen after 1.5 orders or ``switch_iteration`` iterations,
@@ -97,6 +98,9 @@ def solve(
         limiter="venkatakrishnan",
     )
     problem = IncompressibleProblem(mesh, model, conditions)
+    vortex = (
+        problem.farfield_vortex((0.25, 0.0), ["airfoil"]) if vortex_correction else None
+    )
     result = problem.solve(
         problem.initial_state((np.cos(a), np.sin(a))) if w0 is None else w0,
         settings
@@ -109,6 +113,7 @@ def solve(
         callback=callback,
         freeze_limiter_after_iterations=switch_iteration,
         freeze_limiter_after_residual_drop=1.5,
+        vortex=vortex,
     )
     q = 0.5
     loads = problem.wall_loads(result.u)

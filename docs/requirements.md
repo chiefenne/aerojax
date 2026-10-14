@@ -113,6 +113,7 @@ Status: 2026-10-13, requirements complete (steps 1–13). Implementation follows
 | P11 | Turbulent channel vs DNS | Lee & Moser 2015 (Re_τ 180–5200), SA validation for internal flow |
 | P12 | Method of manufactured solutions | Needs a source-term hook; for SA see Eça et al. 2006 |
 | P13 | Multigrid preconditioner (e.g. agglomeration multigrid) | If GMRES-ILU is not robust enough on 200k–500k-cell meshes (D52) |
+| P14 | Convergence robustness on 100k+ cell airfoil meshes | Stage 6: on the 131k-cell O-grid the start-up phase did not reduce the residual; on the 100k-cell PyAero mesh Newton–Krylov stalled at four orders with rejected steps (GMRES at 43 iterations not converged). Candidates: tighter/adaptive GMRES tolerance and restart in the Newton phase, residual-based CFL limit in the start-up phase, continuation in α, freezing the vortex circulation during the Newton phase |
 
 
 ## 5. Not planned
@@ -138,17 +139,24 @@ Notes from implementation:
   exclude the outlet corner. The cell next to the corner takes its pressure
   from the outlet face and its velocity from the wall face in the
   least-squares stencil.
-- Stage 6, PyAero mesh (`examples/meshes/naca0012_pyaero_50k.su2`, C-type,
-  52k cells, boundaries airfoil/inlet/outlet/top/bottom): read and run
-  without changes (PyAero's names are mapped to types in the case file,
-  identical farfield boundaries count as one freestream). Its wall spacing
-  (first cell 4·10⁻³ chords) gives y⁺ ≈ 900 at Re 6·10⁶ — the mesh suits
-  wall-resolved laminar flow up to Re ≈ 10⁴; the TMR RANS comparison needs a
-  first cell of about 5·10⁻⁶ chords (y⁺ = 1 / (Re √(C_f/2)) with C_f ≈ 0.003)
-  with 60–80 layers at growth ≈ 1.15. The refined wake block is aligned with
-  the chord; at 10° the wake leaves it after one to two chords, which is
-  acceptable (the wake is thin only near the trailing edge); a farfield of
-  20–50 chords with the vortex correction is preferable to 3.5 chords.
+- Stage 6, PyAero meshes (boundaries airfoil/inlet/outlet/top/bottom): read
+  and run without changes (PyAero's names are mapped to types in the case
+  file, identical farfield boundaries count as one freestream). First mesh
+  (52k cells, farfield 3.5 chords, first cell 4·10⁻³ chords): y⁺ ≈ 900 at
+  Re 6·10⁶, Euler lift −6.4 % vs 500 chords, −2.9 % with the vortex
+  correction. Second mesh (`examples/meshes/naca0012_pyaero_100k.su2`, 100k
+  cells, farfield 5 chords, outlet 25 chords, first cell 1·10⁻⁴ chords):
+  y⁺ = 12–17 at Re 6·10⁶ (0.5–2.5 at Re 2·10⁵–10⁶, its proper range); SA
+  at Re 6·10⁶, α = 10°, vortex correction: C_L = 1.016 (−6.9 %), C_D =
+  0.0192 with the viscous part 0.0036 (TMR 0.0062): at y⁺ ≈ 12 the
+  wall shear is underpredicted by 40 % and the boundary layer too thick —
+  the TMR case needs a first cell of about 5·10⁻⁶ chords (y⁺ =
+  y₁ Re √(C_f/2) with C_f ≈ 0.003), 60–80 layers at growth ≈ 1.15. The
+  run converged four orders in 45 iterations (7 s per iteration, 100k
+  cells, 2 cores) and then stalled with rejected Newton steps (GMRES not
+  converging at the tolerance) — open, see P14. The refined wake block is
+  aligned with the chord; at 10° the wake leaves it after one to two chords,
+  which is acceptable (the wake is thin only near the trailing edge).
 - Stage 6: on the airfoil O-grid the approximate-Jacobian iteration stalls
   one to two orders below the start (first-order Jacobian vs second-order
   residual) and the Newton–Krylov switch needs the iteration criterion
