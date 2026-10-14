@@ -151,6 +151,8 @@ def solve_steady(
         "accepted": [True],
     }
     converged = norm <= target
+    if callback is not None:
+        callback(0, u, hist["residuals"][0], cfl, True)
     for it in range(1, s.max_iterations + 1):
         if converged or cfl < s.cfl_min:
             break
@@ -232,6 +234,8 @@ def solve_explicit(
         "accepted": [True],
     }
     converged = norm <= target
+    if callback is not None:
+        callback(0, u, hist["residuals"][0], cfl, True)
     for it in range(1, max_iterations + 1):
         if converged:
             break

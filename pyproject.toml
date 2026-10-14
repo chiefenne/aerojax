@@ -25,6 +25,9 @@ dev = ["pytest>=8", "ruff>=0.6"]
 [project.urls]
 Repository = "https://github.com/chiefenne/aerojax"
 
+[project.scripts]
+aerojax = "aerojax.cli:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

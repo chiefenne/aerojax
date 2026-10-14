@@ -194,7 +194,9 @@ class IncompressibleProblem:
             callback=callback,
         )
 
-    def solve_explicit(self, w0=None, cfl=0.8, max_iterations=20000, residual_drop=8.0):
+    def solve_explicit(
+        self, w0=None, cfl=0.8, max_iterations=20000, residual_drop=8.0, callback=None
+    ):
         """Explicit Runge-Kutta reference mode (D25)."""
         w0 = self.initial_state() if w0 is None else w0
         state = {"beta2": self.beta2(w0)}
@@ -210,4 +212,5 @@ class IncompressibleProblem:
             cfl=cfl,
             max_iterations=max_iterations,
             residual_drop=residual_drop,
+            callback=callback,
         )

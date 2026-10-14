@@ -13,3 +13,5 @@ dist/
 # Generated output (meshes, results, plots)
 results/
 examples/output/
+examples/cases/output/
+examples/cases/*.su2

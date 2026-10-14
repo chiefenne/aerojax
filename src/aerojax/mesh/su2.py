@@ -1,4 +1,4 @@
-"""Reader for 2D SU2 native mesh files (``.su2``), requirement D43.
+"""Reader and writer for 2D SU2 native mesh files (``.su2``), requirement D43.
 
 Supported: ``NDIME= 2`` with triangles (type 5) and quadrilaterals (type 9);
 boundary markers made of line elements (type 3). Keywords may appear in any
@@ -94,3 +94,28 @@ def _element(line, path, allowed):
         raise MeshError(f"{path}: unsupported element type {etype} in line '{line}'")
     k = _NODES_PER_ELEMENT[etype]
     return [int(p) for p in parts[1 : 1 + k]]
+
+
+def write_su2(path, mesh):
+    """Write a mesh as a 2D ``.su2`` file (triangles, quadrilaterals only).
+
+    Boundary-face sets become markers. Polygon cells with more than four
+    nodes have no SU2 element type and raise ``MeshError``.
+    """
+    counts = mesh.cell_n_nodes
+    if np.any(counts > 4):
+        raise MeshError("SU2 files support triangles and quadrilaterals only")
+    lines = ["NDIME= 2", f"NELEM= {mesh.n_cells}"]
+    for i in range(mesh.n_cells):
+        nodes = mesh.cell(i)
+        etype = 5 if nodes.size == 3 else 9
+        lines.append(f"{etype} " + " ".join(str(k) for k in nodes) + f" {i}")
+    lines.append(f"NPOIN= {mesh.n_nodes}")
+    lines += [f"{x:.16e} {y:.16e} {k}" for k, (x, y) in enumerate(mesh.nodes)]
+    lines.append(f"NMARK= {len(mesh.boundary_faces)}")
+    for name, faces in mesh.boundary_faces.items():
+        lines.append(f"MARKER_TAG= {name}")
+        lines.append(f"MARKER_ELEMS= {faces.size}")
+        lines += [f"3 {a} {b}" for a, b in mesh.face_nodes[faces]]
+    Path(path).write_text("\n".join(lines) + "\n")
+    return Path(path)

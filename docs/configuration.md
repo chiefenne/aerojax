@@ -1,8 +1,10 @@
 # aerojax – Case configuration (draft)
 
-**Status:** draft for review. Key names and defaults are proposals. Entries
-marked *open: Ox* depend on open requirement steps in
-[requirements.md](requirements.md).
+**Status:** implemented for steady laminar/Euler cases (stage 2). Keys of
+later stages are listed here for completeness and rejected by the validator
+with a pointer to the stage. The schema of record is
+`src/aerojax/config/schema.py`; `aerojax check case.toml` prints the resolved
+configuration with every default.
 
 
 ## 1. Principles
@@ -306,6 +308,7 @@ Needed for force and moment coefficients, and for `fluid.reynolds_number`.
 | `alpha` | float | `4/3` | α-damping coefficient | D24 |
 | `turbulence_spatial_order` | `1` \| `2` | `1` | SA convection (SU2 default: first order) | |
 | `first_order_iterations` | int | `0` | Iterations at first order before switching to `spatial_order` | D36 |
+| `beta_factor` | float | `4.1` | Artificial compressibility β² = `beta_factor`·max|v|² (SU2 default) | D5 |
 
 ### `[solver]`
 
@@ -314,7 +317,7 @@ Needed for force and moment coefficients, and for `fluid.reynolds_number`.
 | `method` | `"implicit"` \| `"explicit-rk"` | `"implicit"` | `"explicit-rk"`: reference/debugging mode | D25 |
 | `max_iterations` | int | `10000` | Pseudo-time iterations (steady) | |
 | `residual_drop` | float | `8.0` | Convergence: orders of magnitude of residual reduction | |
-| `cfl` | table | `{ start = 10.0, max = 1.0e10, cut_factor = 0.1, reject_factor = 10.0 }` | Pseudo-time CFL number, SER control. An update is rejected (and the CFL multiplied by `cut_factor`) if the linear solve fails, the update is not finite, or the residual grows by more than `reject_factor`; values tentative | D35 |
+| `cfl` | table | `{ start = 10.0, max = 1.0e10, growth_factor = 2.0, cut_factor = 0.1, reject_factor = 10.0, explicit = 1.0 }` | Pseudo-time CFL number: SER control with at least `growth_factor` per accepted iteration. An update is rejected (and the CFL multiplied by `cut_factor`) if the linear solve fails, the update is not finite, or the residual grows by more than `reject_factor`. `explicit` is the CFL of the explicit Runge–Kutta mode | D35 |
 | `newton_krylov` | table | `{ enabled = true, switch_at_residual_drop = 2.0 }` | Switch from approximate-Jacobian iterations to Newton–Krylov | D25 |
 | `linear_solver` | table | `{ type = "direct" }` | `"direct"`: sparse LU (SciPy SuperLU), option `refactor_interval`. `"gmres-ilu"`: GMRES with ILU, options `tolerance`, `restart`, `ilu_drop_tolerance`, `ilu_fill_factor`. Default parameter values set from measurements in the first implicit stage | D32 |
 | `turbulence_coupling` | `"segregated"` \| `"coupled"` | `"segregated"` | `"segregated"`: mean flow and turbulence equations solved one after the other per iteration; `"coupled"`: one system for all variables | D34 |
@@ -323,7 +326,7 @@ Needed for force and moment coefficients, and for `fluid.reynolds_number`.
 
 | Key | Type | Default | Description | # |
 |-----|------|---------|-------------|---|
-| `mode` | `"steady"` \| `"unsteady"` | `"steady"` | | D9 |
+| `mode` | `"steady"` \| `"unsteady"` | `"steady"` | `"unsteady"` from stage 4 | D9 |
 | `scheme` | `"bdf2"` | `"bdf2"` | Dual time stepping; the first time step uses BDF1 | D9, D37 |
 | `time_step` | float | req. if unsteady | Δt in s | D9 |
 | `end_time` | float | req. if unsteady | in s | D9 |

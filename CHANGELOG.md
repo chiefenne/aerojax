@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.2 – Stage 2: steady laminar incompressible flow (not yet tagged)
+
+- Incompressible Navier–Stokes in the SU2 INC formulation (D5, D8): working
+  variables (p, u, v), preconditioned pseudo-time with β² = 4.1·max|v|²,
+  FDS convective flux (D21) with the exact |Γ⁻¹A| (SU2's closed form has
+  twice the tangential dissipation), viscous flux with α-damping gradients
+  (D24), body force, Euler mode.
+- Boundary conditions (D38): wall (moving), symmetry/slip wall, velocity
+  inlet, pressure outlet, farfield; periodic pairs as translated interior
+  faces (D39 R4); pressure pin without pressure boundary (R2); mass-balance
+  check (R3); walls as slip walls in Euler mode (R5).
+- Solver: block pseudo-time term, SER with minimum CFL growth factor (D35),
+  first-order start (D36), explicit Runge–Kutta reference mode (D25).
+- Python API: `aerojax.driver.IncompressibleProblem` with function-valued
+  boundary values (D41).
+- TOML case files (D27–D33): schema with defaults, validation with
+  suggestions, resolved configuration with comments, dimensional input and
+  internal non-dimensionalisation (D51), Reynolds-number input (D31).
+- Output: `.log` (console and file), history CSV, VTU fields (D45).
+- CLI: `aerojax run case.toml`, `aerojax check case.toml`.
+- Mesh: `.su2` writer, x-clustering in the rectangle generator.
+- Verification: V1 Couette to round-off (quad, triangle, mixed), V2
+  Poiseuille order 1.9–2.1 on four mesh types, B3 cavity vs Ghia et al.
+  (Re 100 and 1000), explicit = implicit solution.
+- Examples: `examples/stage2_laminar.py`, TOML cases in `examples/cases/`.
+
 ## 0.1 – Stage 1: operators and implicit machinery (2026-10-14)
 
 - Finite-volume geometry as JAX arrays (`aerojax.numerics.build_geometry`).

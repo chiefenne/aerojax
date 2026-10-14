@@ -4,10 +4,11 @@
 Python/JAX with SU2-based numerics, developed as a companion to
 [PyAero](https://github.com/chiefenne/PyAero).
 
-**Status:** stage 1 of the [stage plan](docs/requirements.md#7-stage-plan-d53):
-mesh foundations, finite-volume operators and the implicit solver machinery,
-verified on a scalar convection–diffusion model problem. aerojax does not solve
-flows yet.
+**Status:** stage 2 of the [stage plan](docs/requirements.md#7-stage-plan-d53):
+steady laminar (and inviscid) incompressible flow with the SU2 INC
+formulation, verified on Couette and Poiseuille flow and the lid-driven
+cavity (Ghia et al.). Turbulence, unsteady flow and further boundary
+conditions follow in later stages.
 
 ## Documentation
 
@@ -25,13 +26,26 @@ conda activate aerojax
 pip install -e . --no-deps
 ```
 
-## Tests and example
+## Running a case
+
+```
+aerojax check case.toml        # validate, print the resolved configuration
+aerojax run case.toml          # solve; writes <name>.log, .history.csv, .vtu
+```
+
+Example case files are in `examples/cases/` (generate their meshes first with
+`python examples/cases/make_meshes.py`). The case-file reference is
+[docs/configuration.md](docs/configuration.md); the same setup is available
+from Python through `aerojax.driver.IncompressibleProblem`.
+
+## Tests and examples
 
 ```
 pytest                         # fast tests
 pytest -m slow                 # order-of-accuracy studies, benchmarks
 python examples/stage0_meshes.py
 python examples/stage1_convection_diffusion.py
+python examples/stage2_laminar.py [--re1000]
 ```
 
 The examples write VTU files (for ParaView) and plots to `examples/output/`.
