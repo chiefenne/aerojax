@@ -22,9 +22,12 @@ from aerojax.physics import forces as fz
 from aerojax.physics import incompressible as inc
 from aerojax.solver import PseudoTimeSettings
 
-# Grid-converged SA values of NASA TMR (CFL3D/FUN3D, finest grids); to be
-# confirmed against the TMR page: C_f at x = 0.97 and C_D of the plate.
-TMR_REFERENCE = {"cf_097": 0.002714, "cd": 0.002860}
+# NASA TMR, flatplate_sa.html, finest grid 545 x 385 (N = 208896), M = 0.2,
+# Re = 5e6 per unit length (data files FlatPlate/SA/cf_convergence.dat and
+# drag_convergence.dat): C_f at x = 0.970084 is 0.0027056 (CFL3D) and
+# 0.0027054 (FUN3D); C_D, reference area 2 (the whole plate), is 0.0028599
+# (CFL3D) and 0.0028525 (FUN3D). The means of the two codes are used.
+TMR_REFERENCE = {"cf_097": 0.0027055, "cd": 0.0028562}
 
 
 def plate_mesh(nx_plate=96, nx_front=24, ny=64, reynolds=5.0e6, y_plus=1.0, height=1.0):

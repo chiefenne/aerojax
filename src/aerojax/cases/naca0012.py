@@ -5,10 +5,16 @@ the incompressible solver runs on the O-grid of :func:`naca0012_ogrid`
 (farfield 500 chords, no vortex correction, P10). Compared: C_L, C_D and
 the pressure distribution at alpha = 0, 10 and 15 degrees.
 
-``TMR_REFERENCE`` holds the grid-converged SA values of CFL3D/FUN3D as
-remembered from the TMR page (to be confirmed there); the incompressible
-results are expected within a few percent (compressibility at M = 0.15
-raises C_L by about 1 % through the Prandtl-Glauert factor).
+``TMR_REFERENCE`` holds the SA values of the TMR validation case
+(naca0012_val_sa.html, CFL3D on the 897 x 257 grid with the point-vortex
+farfield correction, data file NACA0012_validation/n0012clcd_cfl3d_sa.dat)
+at alpha = 0, 10 and 15 degrees, and for 10 degrees also the grid-converged
+values of the verification case (naca0012numerics_val_sa.html, families
+I-III on ~14.7 M cells without the correction: CFL3D C_L 1.0891-1.0906,
+C_D 0.012259-0.012262, C_Dp 0.006056-0.006061, C_Dv 0.006201-0.006203;
+FUN3D C_L 1.0910-1.0916, C_D 0.012274-0.012276). The incompressible results
+are expected within a few percent (compressibility at M = 0.15 raises C_L
+by about 1 % through the Prandtl-Glauert factor).
 """
 
 from typing import NamedTuple
@@ -22,9 +28,9 @@ from aerojax.physics import incompressible as inc
 from aerojax.solver import PseudoTimeSettings
 
 TMR_REFERENCE = {
-    0.0: {"cl": 0.0, "cd": 0.00819},
-    10.0: {"cl": 1.0909, "cd": 0.01231},
-    15.0: {"cl": 1.5091, "cd": 0.02124},
+    0.0: {"cl": 0.0, "cd": 0.0081925},
+    10.0: {"cl": 1.0909, "cd": 0.012311, "cd_pressure": 0.00606, "cd_viscous": 0.00620},
+    15.0: {"cl": 1.5461, "cd": 0.021237},
 }
 
 

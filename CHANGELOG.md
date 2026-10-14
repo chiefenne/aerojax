@@ -15,7 +15,7 @@
   (`newton_krylov.switch_at_iteration`) in addition to the residual drop.
 - Case R2 (`aerojax.cases.naca0012`): C_L, C_D (pressure/viscous), C_M, C_p
   and C_f at Re 6e6 vs the TMR SA values. 256 x 128 O-grid (33k cells):
-  C_L -0.008 / 1.076 / 1.536 at α = 0 / 10 / 15° (TMR 0 / 1.091 / 1.509),
+  C_L -0.008 / 1.076 / 1.536 at α = 0 / 10 / 15° (TMR 0 / 1.0909 / 1.5461),
   viscous drag close to TMR, pressure drag too high on the coarse O-grid
   wake (see docs/requirements.md D40). PyAero meshes (boundary faces
   `airfoil`, `farfield`) can be used directly.
@@ -40,8 +40,8 @@
   boundaries in the three forms (ν_t/ν + Tu, k + ℓ, ν̃/ν), equivalent values
   reported in the log, warning outside the TMR range ν̃/ν = 3–5; y⁺ in the
   wall CSV, ν̃ and ν_t/ν in the VTU output.
-- Verification R1: turbulent flat plate on the TMR domain, C_f(0.97) +1.0 %
-  and C_D +1.7 % vs the TMR SA values on 7.7k cells (+0.9 / +1.4 % on 23k),
+- Verification R1: turbulent flat plate on the TMR domain, C_f(0.97) +1.3 %
+  and C_D +1.8 % vs the TMR SA values on 7.7k cells (+1.2 / +1.5 % on 23k),
   u⁺(y⁺) follows the log law. GMRES-ILU verified on the 23k-cell plate.
 - Examples: `examples/stage5_rans.py`, TOML case
   `examples/cases/flat_plate_rans.toml`.

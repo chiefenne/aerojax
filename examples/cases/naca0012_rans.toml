@@ -1,6 +1,6 @@
 # R2: NACA 0012 at Re = 6e6 (NASA TMR 2DN00 case), alpha = 10 deg, SA-neg.
 # O-grid with a farfield at 500 chords (no vortex correction). TMR (SA, CFL3D,
-# M = 0.15): CL = 1.0909, CD = 0.01231 (approximate values, see the docs).
+# M = 0.15, 897x257 grid): CL = 1.0909, CD = 0.012311 (CDp 0.00606, CDv 0.00620).
 # A PyAero mesh can replace the generated one: boundary faces "airfoil" and
 # "farfield".
 
