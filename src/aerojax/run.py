@@ -239,6 +239,7 @@ def run_case(path, console=True, mesh=None):
                 nk_linear_tolerance=solver["newton_krylov"]["linear_tolerance"],
                 nk_restart=solver["newton_krylov"]["restart"],
                 nk_max_krylov=solver["newton_krylov"]["max_iterations"],
+                nk_refactor_interval=solver["newton_krylov"]["refactor_interval"],
                 linear=LinearSettings(**solver["linear_solver"]),
             )
             freeze = cfg["numerics"]["limiter_freeze"]

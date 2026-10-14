@@ -202,6 +202,12 @@ SCHEMA = {
             "max_iterations": Opt(
                 "int", 200, "Maximum GMRES iterations per Newton step", minimum=1
             ),
+            "refactor_interval": Opt(
+                "int",
+                1,
+                "Rebuild the preconditioner every n-th Newton step (1 = every step)",
+                minimum=1,
+            ),
         },
         "linear_solver": {
             "type": Opt(

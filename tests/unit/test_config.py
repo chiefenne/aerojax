@@ -114,6 +114,11 @@ def test_force_boundaries_and_reference_defaults():
     assert "is not a wall" in problems(raw)
     raw = {**MINIMAL, "output": {"force_boundaries": ["botom"]}}
     assert "did you mean 'bottom'" in problems(raw)
+    # Slip walls count as walls by default only in Euler mode (body surface).
+    raw = {**MINIMAL, "boundary": {**MINIMAL["boundary"], "top": {"type": "slip-wall"}}}
+    assert resolve(raw)["output"]["force_boundaries"] == ["bottom"]
+    raw = {**raw, "physics": {"model": "euler"}}
+    assert resolve(raw)["output"]["force_boundaries"] == ["bottom", "top"]
 
 
 def test_new_boundary_types():

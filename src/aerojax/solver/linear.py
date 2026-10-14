@@ -57,12 +57,22 @@ class LinearSettings:
     ilu_fill_factor: float = 20.0
 
 
+# SuperLU options. The Jacobian has a symmetric sparsity pattern, for which
+# the minimum-degree ordering of A^T + A gives about half the fill and
+# factorization time of the default COLAMD (37k-cell mesh: fill 10.1x vs
+# 19.7x of nnz(A), 0.9 s vs 1.8 s). With this ordering, row pivoting must be
+# restricted to keep the fill: the default threshold (1.0, partial pivoting)
+# let the fill grow to >100x on a converged Euler state, 0.1 keeps it at 7x
+# (diagonal pivots are used unless smaller than 0.1 times the column maximum).
+SUPERLU_OPTIONS = {"permc_spec": "MMD_AT_PLUS_A", "diag_pivot_thresh": 0.1}
+
+
 class DirectLU:
     """Sparse LU factorization of a matrix."""
 
     def __init__(self, matrix):
         try:
-            self._lu = spla.splu(matrix.tocsc())
+            self._lu = spla.splu(matrix.tocsc(), **SUPERLU_OPTIONS)
         except RuntimeError as exc:  # "Factor is exactly singular"
             raise LinearSolverError(str(exc)) from exc
         self.iterations = 0
@@ -87,6 +97,7 @@ class GmresILU:
                 self._matrix,
                 drop_tol=settings.ilu_drop_tolerance,
                 fill_factor=settings.ilu_fill_factor,
+                **SUPERLU_OPTIONS,
             )
         except RuntimeError as exc:
             raise LinearSolverError(str(exc)) from exc

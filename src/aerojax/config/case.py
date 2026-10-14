@@ -305,15 +305,21 @@ def _consistency(data, explicit, problems, notices, path):
     if ref["moment_center"] is None:
         ref["moment_center"] = [0.25 * ref["length"], 0.0]
 
-    # Force boundaries: default all walls; names must exist and be walls.
-    walls = [n for n, t in types.items() if t in ("wall", "transpiration-wall")]
+    # Force boundaries: default all walls (slip walls too in Euler mode);
+    # names must exist and be wall-type boundaries.
+    body = ("wall", "transpiration-wall", "slip-wall")
+    walls = [
+        n
+        for n, t in types.items()
+        if t in body and (t != "slip-wall" or physics["model"] == "euler")
+    ]
     out = data["output"]
     if out["force_boundaries"] is None:
         out["force_boundaries"] = walls
     for n in out["force_boundaries"]:
         if n not in boundaries:
             problems.append(_unknown("output.force_boundaries entry", n, boundaries))
-        elif n not in walls:
+        elif types[n] not in body:
             problems.append(
                 f"output.force_boundaries: '{n}' is not a wall (type {types[n]!r})"
             )

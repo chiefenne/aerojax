@@ -80,6 +80,11 @@ class PseudoTimeSettings:
         GMRES restart length in the Newton-Krylov phase.
     nk_max_krylov : int
         Maximum GMRES iterations per Newton step.
+    nk_refactor_interval : int
+        In the Newton-Krylov phase, rebuild the preconditioner (first-order
+        Jacobian plus pseudo-time term, factorized) only every n-th step and
+        reuse it otherwise; the factorization dominates the cost on large
+        meshes. 1 = every step.
     linear : LinearSettings
         Sparse linear solver of phase 1 and preconditioner of phase 2.
     """
@@ -98,6 +103,7 @@ class PseudoTimeSettings:
     nk_linear_tolerance: float = 1.0e-2
     nk_restart: int = 50
     nk_max_krylov: int = 200
+    nk_refactor_interval: int = 1
     linear: LinearSettings = LinearSettings()
 
 
@@ -196,6 +202,7 @@ def solve_steady(
     converged = norm <= target
     if callback is not None:
         callback(0, u, hist["residuals"][0], cfl, True)
+    lin, nk_steps_since_factor = None, 0
     for it in range(1, s.max_iterations + 1):
         if converged or cfl < s.cfl_min:
             break
@@ -209,8 +216,16 @@ def solve_steady(
         t_matrix = time_term(u, cfl)
         accepted, lin_its = False, 0
         try:
-            lin = factorize(jacobian(u) + t_matrix, s.linear)
+            reuse = (
+                use_nk
+                and lin is not None
+                and nk_steps_since_factor < s.nk_refactor_interval
+            )
+            if not reuse:
+                lin = factorize(jacobian(u) + t_matrix, s.linear)
+                nk_steps_since_factor = 0
             if use_nk:
+                nk_steps_since_factor += 1
                 du, lin_its = solve_matrix_free(
                     _newton_operator(t_matrix, jvp, u),
                     -r.ravel(),
@@ -242,6 +257,7 @@ def solve_steady(
             converged = norm <= target
         else:
             cfl *= s.cut_factor
+            lin = None  # rebuild the preconditioner after a rejection
         hist["residual"].append(norm)
         hist["residuals"].append(rms_per_variable(r))
         if callback is not None:

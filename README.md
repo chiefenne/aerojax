@@ -4,16 +4,17 @@
 Python/JAX, developed as a companion to
 [PyAero](https://github.com/chiefenne/PyAero).
 
-**Status:** stage 2 of the [stage plan](docs/requirements.md#7-stage-plan-d53):
-steady laminar (and inviscid) incompressible flow with the SU2 INC
-formulation, verified on Couette and Poiseuille flow and the lid-driven
-cavity (Ghia et al.). Turbulence, unsteady flow and further boundary
-conditions follow in later stages.
+**Status:** stage 3 of the [stage plan](docs/requirements.md#7-stage-plan-d53):
+steady laminar and inviscid incompressible flow with the SU2 INC
+formulation and a Newton–Krylov solver, verified on Couette and Poiseuille
+flow, the lid-driven cavity (Ghia et al.), the inviscid cylinder, the
+Blasius flat plate and the DFG cylinder-in-channel benchmark. Unsteady flow
+(stage 4) and turbulence (stage 5) follow.
 
 ## Documentation
 
 - [Requirements](docs/requirements.md): decisions, planned features, stage plan
-- [Case configuration](docs/configuration.md): TOML case-file reference (draft)
+- [Case configuration](docs/configuration.md): TOML case-file reference
 
 ## Installation
 
@@ -46,6 +47,7 @@ pytest -m slow                 # order-of-accuracy studies, benchmarks
 python examples/stage0_meshes.py
 python examples/stage1_convection_diffusion.py
 python examples/stage2_laminar.py [--re1000]
+python examples/stage3_benchmarks.py
 ```
 
 The examples write VTU files (for ParaView) and plots to `examples/output/`.

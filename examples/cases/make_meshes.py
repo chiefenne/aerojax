@@ -5,7 +5,7 @@ python examples/cases/make_meshes.py
 
 from pathlib import Path
 
-from aerojax.mesh import rectangle, write_su2
+from aerojax.mesh import annulus, rectangle, write_su2
 
 HERE = Path(__file__).parent
 
@@ -32,6 +32,9 @@ def main():
             seed=1,
         ),
         "cavity_quad_64.su2": rectangle(64, 64, cell_type="quad"),
+        "cylinder_ogrid_128x48.su2": annulus(
+            128, 48, radius=0.5, outer_radius=10.0, growth=1.0 + 6.0 / 48
+        ),
     }
     for name, mesh in meshes.items():
         write_su2(HERE / name, mesh)

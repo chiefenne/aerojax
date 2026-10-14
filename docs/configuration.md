@@ -1,6 +1,6 @@
-# aerojax – Case configuration (draft)
+# aerojax – Case configuration
 
-**Status:** implemented for steady laminar/Euler cases (stage 2). Keys of
+**Status:** implemented for steady laminar/Euler cases (stage 3). Keys of
 later stages are listed here for completeness and rejected by the validator
 with a pointer to the stage. The schema of record is
 `src/aerojax/config/schema.py`; `aerojax check case.toml` prints the resolved
@@ -244,10 +244,10 @@ dependence: P7). Types marked "inflow" take a `turbulence` table
 | `"symmetry"` | Symmetry plane: zero normal velocity, no shear stress |
 | `"farfield"` | `velocity` (magnitude, m/s), `angle_of_attack` (deg, default 0), `pressure` (Pa, default 0); inflow: `turbulence` |
 | `"velocity-inlet"` | `velocity = [u, v]` in m/s; inflow: `turbulence` |
-| `"total-pressure-inlet"` | `total_pressure` (Pa), `flow_direction`; inflow: `turbulence` |
+| `"total-pressure-inlet"` | `total_pressure` (Pa, gauge), `flow_direction = [d_x, d_y]` (normalised internally); the velocity magnitude follows from p_total − p = ½ρ|v|² with the interior pressure; inflow: `turbulence` |
 | `"pressure-outlet"` | `pressure` (Pa, default 0) |
 | `"periodic"` | `partner` (name of the matching boundary faces; gets no entry of its own), `translation = [dx, dy]` (m); driving force: `physics.mean_pressure_gradient` |
-| `"transpiration-wall"` | `normal_velocity` (m/s; + blowing, − suction), optional time dependence (D18); inflow (blowing): `turbulence` |
+| `"transpiration-wall"` | `normal_velocity` (m/s; + blowing into the domain, − suction), zero tangential velocity; time dependence: P7 (D18); inflow (blowing): `turbulence` |
 
 ### Turbulence values
 
@@ -287,9 +287,9 @@ Needed for force and moment coefficients, and for `fluid.reynolds_number`.
 | Key | Type | Default | Description | # |
 |-----|------|---------|-------------|---|
 | `length` | float | `1.0`; req. with `fluid.reynolds_number` | Reference length (e.g. chord, channel height) in m | D31 |
-| `moment_center` | [float, float] | `[0.25, 0.0]` × `length` | Moment reference point in m | |
+| `moment_center` | [float, float] | `[0.25 · length, 0.0]` | Moment reference point in m; C_M positive counter-clockwise (nose-up for flow in +x) | |
 | `velocity` | float | farfield velocity, if exactly one farfield boundary; otherwise req. with `fluid.reynolds_number` | Reference velocity in m/s | D28, D31 |
-| `angle_of_attack` | float | farfield angle of attack | Defines the drag and lift directions | D28 |
+| `angle_of_attack` | float | farfield angle of attack if exactly one farfield boundary, else 0 | Defines the drag (along the flow) and lift directions | D28 |
 | `density` | float | `fluid.density` | Reference density in kg/m³ | |
 | `pressure_point` | [float, float] | domain centroid | Only without a pressure-fixing boundary: the pressure in the cell nearest this point is fixed to `initial.pressure` | D39 |
 
@@ -301,7 +301,7 @@ Needed for force and moment coefficients, and for `fluid.reynolds_number`.
 | `spatial_order` | `1` \| `2` | `2` | 1: piecewise constant; 2: MUSCL reconstruction | D21 |
 | `limiter` | `"venkatakrishnan-wang"` \| `"none"` | `"venkatakrishnan-wang"` | Slope limiter | D23 |
 | `limiter_threshold` | float | `0.05` | Wang's ε′ (suggested range 0.01–0.20) | D23 |
-| `limiter_freeze` | table | – | `{ after_iterations = n }` or `{ after_residual_drop = orders }` | D23 |
+| `limiter_freeze` | table | – | `{ after_iterations = n }` and/or `{ after_residual_drop = orders }`: freeze the limiter values once either condition holds, so that Newton–Krylov converges to machine precision | D23 |
 | `gradient` | `"weighted-least-squares"` | `"weighted-least-squares"` | Vertex-neighbour stencil | D22 |
 | `gradient_weight_exponent` | float | `1.0` | q in weights 1/d^q; default to be confirmed by verification | D22 |
 | `viscous_gradient` | `"alpha-damping"` \| `"edge-correction"` | `"alpha-damping"` | Face-gradient scheme | D24 |
@@ -318,8 +318,8 @@ Needed for force and moment coefficients, and for `fluid.reynolds_number`.
 | `max_iterations` | int | `10000` | Pseudo-time iterations (steady) | |
 | `residual_drop` | float | `8.0` | Convergence: orders of magnitude of residual reduction | |
 | `cfl` | table | `{ start = 10.0, max = 1.0e10, growth_factor = 2.0, cut_factor = 0.1, reject_factor = 10.0, explicit = 1.0 }` | Pseudo-time CFL number: SER control with at least `growth_factor` per accepted iteration. An update is rejected (and the CFL multiplied by `cut_factor`) if the linear solve fails, the update is not finite, or the residual grows by more than `reject_factor`. `explicit` is the CFL of the explicit Runge–Kutta mode | D35 |
-| `newton_krylov` | table | `{ enabled = true, switch_at_residual_drop = 2.0 }` | Switch from approximate-Jacobian iterations to Newton–Krylov | D25 |
-| `linear_solver` | table | `{ type = "direct" }` | `"direct"`: sparse LU (SciPy SuperLU), option `refactor_interval`. `"gmres-ilu"`: GMRES with ILU, options `tolerance`, `restart`, `ilu_drop_tolerance`, `ilu_fill_factor`. Default parameter values set from measurements in the first implicit stage | D32 |
+| `newton_krylov` | table | `{ enabled = true, switch_at_residual_drop = 2.0, linear_tolerance = 1e-2, restart = 50, max_iterations = 200, refactor_interval = 1 }` | Switch from approximate-Jacobian iterations to Newton–Krylov once the residual has dropped by the given orders; GMRES on the exact Jacobian (`jax.jvp`) preconditioned by the factorized first-order system. `refactor_interval = n` rebuilds the preconditioner only every n-th Newton step (more GMRES iterations, fewer factorizations) | D25 |
+| `linear_solver` | table | `{ type = "direct", tolerance = 1e-6, restart = 50, max_iterations = 500, ilu_drop_tolerance = 1e-5, ilu_fill_factor = 20 }` | `"direct"`: sparse LU (SciPy SuperLU). `"gmres-ilu"`: GMRES with an incomplete LU; the ILU options set its accuracy and memory (fill 3–5× with drop 1e-3 / fill 5, close to the exact LU with the defaults). Both also precondition Newton–Krylov | D32 |
 | `turbulence_coupling` | `"segregated"` \| `"coupled"` | `"segregated"` | `"segregated"`: mean flow and turbulence equations solved one after the other per iteration; `"coupled"`: one system for all variables | D34 |
 
 ### `[time]`
@@ -341,7 +341,7 @@ Needed for force and moment coefficients, and for `fluid.reynolds_number`.
 | `formats` | array | `["vtu"]` | Field output; `"vtu"` (series as PVD for unsteady runs) | D45 |
 | `interval` | int | `0` | Write every n iterations / time steps; 0 = only at the end | |
 | `verbosity` | `"normal"` \| `"detailed"` | `"normal"` | `"detailed"` also logs the inner iterations of unsteady runs | D45 |
-| `force_boundaries` | array of strings | all `"wall"` boundaries | Boundary faces over which forces and moments are integrated | |
+| `force_boundaries` | array of strings | all wall boundaries | Boundary faces over which forces and moments are integrated (walls, transpiration walls; slip walls allowed, and included by default in Euler mode); C_L, C_D, C_M per iteration in the log and history, and a wall CSV (x, y, p, Cp, τ_x, τ_y, Cf) per boundary at the end. Forces are those of the fluid on the wall; Cf uses the face tangent oriented counter-clockwise with respect to the fluid (+x on a bottom wall) | D45 |
 | `history` | bool | `true` | Residuals and coefficients as CSV and in the `.log` file: per pseudo-time iteration (steady) or per physical time step (unsteady) | D45 |
 
 
