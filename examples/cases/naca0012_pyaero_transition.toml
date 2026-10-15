@@ -1,6 +1,7 @@
 # NACA 0012 at Re = 6e6, alpha = 0, SA-neg with prescribed transition at
-# x/c = 0.45 on both sides (a representative free-transition location; the
-# proper value comes from XFOIL's e^N method or from experiment). Compared
+# x/c = 0.45 on both sides at alpha = 0 (a representative free-transition
+# location; the proper values come from XFOIL's e^N method or from experiment,
+# per angle of attack). Compared
 # with Abbott & von Doenhoff's smooth-airfoil drag at Re 6e6 (CD = 0.0058 at
 # CL = 0) and Ladson's tripped data (0.0081). Same mesh and numerics as
 # naca0012_pyaero_rans.toml; a restart from a fully turbulent solution
@@ -17,11 +18,15 @@ model = "rans"
 turbulence = "sa-neg"
 
 [physics.transition]
-mode = "prescribed"               # laminar up to the transition location (D15);
-laminar_region = [                # take x_max from XFOIL (e^N) or experiment
-  { boundary = "airfoil", side = "upper", x_max = 0.45, ramp = 0.02 },
-  { boundary = "airfoil", side = "lower", x_max = 0.45, ramp = 0.02 },
-]                                 # ramp: production blended in over 2 % chord
+mode = "prescribed"               # laminar up to the transition location (D15)
+boundary = "airfoil"
+ramp = 0.02                       # m: production blended in over 2 % chord
+by_alpha = [                      # transition locations in m from the leading
+  { alpha = 0.0, upper = 0.45, lower = 0.45 },   # edge (XFOIL xtr times the
+  { alpha = 4.0, upper = 0.30, lower = 0.60 },   # chord), interpolated to the
+  { alpha = 8.0, upper = 0.10, lower = 0.75 },   # case's angle of attack; also
+]                                 # used by "aerojax polar". PLACEHOLDER values:
+                                  # replace by XFOIL's e^N results for your case.
 
 [fluid]
 density = 1.0                     # kg/m^3

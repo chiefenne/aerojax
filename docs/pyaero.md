@@ -248,6 +248,37 @@ e^N method or from experiment (`examples/cases/naca0012_pyaero_transition.toml`)
 ```toml
 [physics.transition]
 mode = "prescribed"
+boundary = "airfoil"
+ramp = 0.02                       # m
+by_alpha = [                      # alpha in deg, upper/lower in m from the LE
+  { alpha = 0.0, upper = 0.45, lower = 0.45 },
+  { alpha = 4.0, upper = 0.30, lower = 0.60 },
+  { alpha = 8.0, upper = 0.10, lower = 0.75 },
+]
+```
+
+How to fill the table:
+
+1. Run XFOIL (or another e^N method) for the airfoil at the Reynolds number
+   of the case, with the critical amplification N for the environment (9 for
+   a wind tunnel or a clean free flight, 11–12 for a sailplane in calm air,
+   lower for a turbulent environment), at the angles of the polar. XFOIL
+   reports the transition points as `xtr` top/bottom in x/c.
+2. Enter them as `upper` and `lower` in metres from the leading edge, i.e.
+   `xtr` times the chord in metres (`reference.length`). `upper` is the
+   side on which the fluid lies above the wall (the suction side at positive
+   angle of attack).
+3. The case's angle of attack (`reference.angle_of_attack`, by default the
+   farfield value) picks the row, with linear interpolation between rows and
+   the end rows held beyond the table. `aerojax polar` re-resolves the case
+   per angle, so one table serves the whole sweep; the generated regions
+   appear in `<name>.resolved.toml`.
+
+Fixed regions instead of a table (one angle):
+
+```toml
+[physics.transition]
+mode = "prescribed"
 laminar_region = [
   { boundary = "airfoil", side = "upper", x_max = 0.45, ramp = 0.02 },
   { boundary = "airfoil", side = "lower", x_max = 0.45, ramp = 0.02 },
@@ -257,7 +288,9 @@ laminar_region = [
 `ramp` blends the production in over the given length (metres) instead of a
 hard cut; with the hard cut the Newton phase stalled at a residual of 10⁻⁷
 on the stage-6 mesh (a discontinuous source), with the coefficients
-converged all the same. At Re 6·10⁶, α = 0, transition at 0.45 gave
+converged all the same. A laminar separation bubble (low Reynolds numbers)
+is not represented by a prescribed location; that needs a transition model
+(L3). At Re 6·10⁶, α = 0, transition at 0.45 gave
 CD = 0.0053 (pressure 0.0010, viscous 0.0043) against 0.0083 fully
 turbulent, Abbott & von Doenhoff's smooth-airfoil value of 0.0058 and
 Ladson's tripped 0.0081 — the drag is as sensitive to the transition

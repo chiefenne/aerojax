@@ -4,7 +4,9 @@
 
 - Restart files (`<name>.restart.npz`, `initial.restart`) and `aerojax polar`
   (angle sweep as a restart chain, merged `<name>.polar.csv`).
-- Laminar regions: `ramp` blends the SA production in over a length.
+- Prescribed transition per angle of attack (`physics.transition.by_alpha`,
+  interpolated to the case's angle, used by `aerojax polar`); `ramp` blends
+  the SA production in over a length.
 - Validation of the fully turbulent NACA 0012 polar on the PyAero y⁺ = 1
   mesh against Ladson (NASA TM 4074) and of the C_p at 10° against Gregory
   & O'Reilly; packaged data `naca0012_ladson_re6e6_tripped.csv`,

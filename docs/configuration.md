@@ -196,6 +196,7 @@ case file (D42).
 | Key | Type | Default | Description | # |
 |-----|------|---------|-------------|---|
 | `mode` | `"none"` \| `"prescribed"` | `"none"` | `"none"` = fully turbulent | D15 |
+| `boundary`, `ramp`, `by_alpha` | string, float (m), array of tables | – | Transition locations per angle of attack: `by_alpha = [{ alpha = 0, upper = 0.45, lower = 0.45 }, …]` (deg; metres from the leading edge, XFOIL's `xtr` times the chord), interpolated linearly to the case's angle (`reference.angle_of_attack`, by default the farfield value; end rows held beyond the table) and turned into two `laminar_region` entries on `boundary` with the given `ramp`. Used by `aerojax polar` per angle | D15 |
 | `laminar_region` | array of tables | – | Regions where SA production is switched off, e.g. `[{ boundary = "airfoil", side = "upper", x_max = 0.35 }]`: cells whose nearest wall face belongs to `boundary` (required), optionally only on one `side` (`"upper"`: the fluid lies above the wall, `"lower"`: below) and within `x_min`, `x_max`, `y_min`, `y_max` (m); `ramp` (m) blends the production in linearly over that distance inside each bound instead of a hard cut, which keeps the SA source differentiable at the transition front | D15 |
 
 ### `[fluid]`

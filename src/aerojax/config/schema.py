@@ -71,6 +71,23 @@ SCHEMA = {
                 "ramp (blending length at the bounds)",
                 "m",
             ),
+            "boundary": Opt(
+                "string", None, "Airfoil boundary of the by_alpha transition table"
+            ),
+            "ramp": Opt(
+                "float",
+                0.0,
+                "Blending length of the by_alpha transition locations",
+                "m",
+                minimum=0.0,
+            ),
+            "by_alpha": Opt(
+                "table_list",
+                None,
+                "Transition locations per angle of attack: tables {alpha, upper, "
+                "lower} (deg, m from the leading edge), interpolated linearly in "
+                "alpha to the case's angle; generates laminar_region",
+            ),
         },
         "mean_pressure_gradient": Opt(
             "float2",

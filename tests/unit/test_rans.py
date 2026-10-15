@@ -120,6 +120,37 @@ RANS_MINIMAL = {
 }
 
 
+def test_transition_by_alpha_interpolates_to_the_case_angle():
+    raw = {
+        **RANS_MINIMAL,
+        "boundary": {
+            **RANS_MINIMAL["boundary"],
+            "top": {"type": "farfield", "velocity": 1.0, "angle_of_attack": 5.0},
+        },
+        "physics": {
+            "model": "rans",
+            "transition": {
+                "mode": "prescribed",
+                "boundary": "bottom",
+                "ramp": 0.02,
+                "by_alpha": [
+                    {"alpha": 0.0, "upper": 0.5, "lower": 0.5},
+                    {"alpha": 10.0, "upper": 0.1, "lower": 0.7},
+                ],
+            },
+        },
+    }
+    regions = resolve(raw)["physics"]["transition"]["laminar_region"]
+    assert [r["side"] for r in regions] == ["upper", "lower"]
+    assert regions[0]["x_max"] == pytest.approx(0.3) and regions[1][
+        "x_max"
+    ] == pytest.approx(0.6)
+    assert regions[0]["ramp"] == 0.02 and regions[0]["boundary"] == "bottom"
+    raw["physics"]["transition"]["laminar_region"] = [{"boundary": "bottom"}]
+    with pytest.raises(Exception, match="either laminar_region or by_alpha"):
+        resolve(raw)
+
+
 def test_rans_config_rules():
     cfg = resolve(RANS_MINIMAL)
     assert cfg["physics"]["turbulence"] == "sa-neg"

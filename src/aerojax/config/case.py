@@ -217,6 +217,50 @@ def _resolve_boundary(name, values, explicit, problems):
 LAMINAR_REGION_KEYS = ("boundary", "side", "x_min", "x_max", "y_min", "y_max", "ramp")
 
 
+def _transition_by_alpha(tr, boundaries, farfields, ref, problems):
+    """Generate laminar_region from the per-angle transition table (D15)."""
+    dotted = "physics.transition"
+    if tr["laminar_region"]:
+        problems.append(f"{dotted}: give either laminar_region or by_alpha")
+        return
+    if tr["mode"] != "prescribed":
+        problems.append(f"{dotted}.by_alpha needs mode = prescribed")
+        return
+    if tr["boundary"] is None:
+        problems.append(f"{dotted}.boundary is required with by_alpha")
+        return
+    if tr["boundary"] not in boundaries:
+        problems.append(_unknown(dotted + ".boundary", tr["boundary"], boundaries))
+        return
+    table = tr["by_alpha"]
+    for i, row in enumerate(table):
+        for key in ("alpha", "upper", "lower"):
+            if not isinstance(row.get(key), int | float) or isinstance(
+                row.get(key), bool
+            ):
+                problems.append(f"{dotted}.by_alpha[{i}]: {key} must be a number")
+                return
+    alpha = ref["angle_of_attack"]
+    if alpha is None:
+        angles = {boundaries[n].get("angle_of_attack", 0.0) for n in farfields}
+        if len(angles) != 1:
+            problems.append(
+                f"{dotted}.by_alpha: the angle of attack is not defined (give "
+                "reference.angle_of_attack)"
+            )
+            return
+        alpha = angles.pop()
+    rows = sorted(table, key=lambda r: r["alpha"])
+    a = np.array([r["alpha"] for r in rows], dtype=float)
+    regions = []
+    for side in ("upper", "lower"):
+        x = float(np.interp(alpha, a, [r[side] for r in rows]))
+        regions.append(
+            {"boundary": tr["boundary"], "side": side, "x_max": x, "ramp": tr["ramp"]}
+        )
+    tr["laminar_region"] = regions
+
+
 def _turbulence_table(holder, dotted, problems):
     """Check a turbulence table (D33): exactly one of the three forms."""
     table = holder.get("turbulence")
@@ -334,6 +378,8 @@ def _consistency(data, explicit, problems, notices, path):
     elif not rans and physics["turbulence"] is not None:
         notices.append("physics.turbulence ignored: physics.model is not rans")
     tr = physics["transition"]
+    if tr["by_alpha"]:
+        _transition_by_alpha(tr, boundaries, farfields, ref, problems)
     if tr["mode"] == "prescribed":
         if not rans:
             problems.append("physics.transition needs physics.model = rans")
