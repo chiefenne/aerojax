@@ -76,7 +76,9 @@ def scalar_problem(u0):
 
 def test_rejected_update_cuts_cfl_and_recovers():
     residual, jacobian, time_term, u0 = scalar_problem(9.0)
-    settings = PseudoTimeSettings(cfl_start=1.0e8, residual_drop=12.0)
+    settings = PseudoTimeSettings(
+        cfl_start=1.0e8, residual_drop=12.0, line_search_steps=0
+    )
     with np.errstate(invalid="ignore"):
         result = solve_steady(residual, jacobian, time_term, u0, settings)
     h = result.history
@@ -84,6 +86,16 @@ def test_rejected_update_cuts_cfl_and_recovers():
     np.testing.assert_allclose(result.u, 1.0, rtol=1e-12)
     assert not h["accepted"][1]  # first full Newton step lands at u < 0
     assert h["cfl"][2] == 1.0e8 * settings.cut_factor
+
+
+def test_line_search_accepts_a_shortened_step():
+    """With backtracking (D54) the same step is halved and accepted."""
+    residual, jacobian, time_term, u0 = scalar_problem(9.0)
+    settings = PseudoTimeSettings(cfl_start=1.0e8, residual_drop=12.0)
+    with np.errstate(invalid="ignore"):
+        result = solve_steady(residual, jacobian, time_term, u0, settings)
+    assert result.converged and result.history["accepted"].all()
+    np.testing.assert_allclose(result.u, 1.0, rtol=1e-12)
 
 
 def test_ser_raises_cfl_while_residual_falls():

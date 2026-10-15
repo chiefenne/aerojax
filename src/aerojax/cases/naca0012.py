@@ -67,7 +67,7 @@ def solve(
     callback=None,
     switch_iteration=40,
     vortex_correction=False,
-    release_limiter=False,
+    release_limiter=True,
 ):
     """Run the NACA 0012 at the angle of attack ``alpha`` (degrees).
 
@@ -87,11 +87,12 @@ def solve(
     conditions.update(
         {n: dict(farfield) for n in mesh.boundary_faces if n != "airfoil"}
     )
-    # Local Venkatakrishnan limiter: the global-range threshold leaves the
-    # thin near-wall cells unlimited and diverges on the curved nose (D23);
-    # the limiter is frozen after 1.5 orders or ``switch_iteration`` iterations,
-    # where Newton-Krylov takes over (the approximate-Jacobian iteration stalls
-    # one to two orders below the start on these meshes).
+    # Local Venkatakrishnan limiter for the start-up transient (the
+    # global-range threshold leaves the thin near-wall cells unlimited and
+    # diverges on the curved nose, D23); after 1.5 orders or
+    # ``switch_iteration`` iterations the limiter is released (unlimited
+    # second order, the standard for subsonic flow, D54) and Newton-Krylov
+    # takes over.
     model = inc.IncompressibleModel(
         density=1.0,
         viscosity=1.0 / reynolds,

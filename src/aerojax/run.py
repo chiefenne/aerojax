@@ -377,6 +377,7 @@ def _run_steady(log, config, problem, scaling, w0, mesh, out_dir):
             freeze_limiter_after_iterations=freeze["after_iterations"],
             freeze_limiter_after_residual_drop=freeze["after_residual_drop"],
             vortex=vortex,
+            release_limiter=freeze["release"],
         )
     else:
         result = problem.solve_explicit(

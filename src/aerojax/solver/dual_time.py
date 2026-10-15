@@ -17,7 +17,11 @@ from typing import NamedTuple
 import numpy as np
 import scipy.sparse as sp
 
-from aerojax.solver.pseudo_time import PseudoTimeSettings, rms, solve_steady
+from aerojax.solver.pseudo_time import (
+    PseudoTimeSettings,
+    rms_per_variable,
+    solve_steady,
+)
 
 
 class DualTimeSettings(NamedTuple):
@@ -161,7 +165,7 @@ def solve_unsteady(
         # starting residual, not the accuracy required.
         start, norm_n = u_n, None
         if s.extrapolate and u_nm1 is not None:
-            start, norm_n = 2.0 * u_n - u_nm1, rms(res_t(u_n))
+            start, norm_n = 2.0 * u_n - u_nm1, rms_per_variable(res_t(u_n))
         inner = solve_steady(
             res_t,
             jac_t,
@@ -175,9 +179,9 @@ def solve_unsteady(
         h = inner.history
         t = step * dt
         u_nm1, u_n = u_n, inner.u
-        tiny = np.finfo(float).tiny
-        norm_n = h["residual"][0] if norm_n is None else norm_n
-        drop = float(np.log10(max(norm_n, tiny) / max(h["residual"][-1], tiny)))
+        # Inner drop in orders: the per-equation measure (relative to R*(u^n)
+        # or to the inner start).
+        drop = float(-np.log10(max(h["measure"][-1], np.finfo(float).tiny)))
         n_inner = int(h["iteration"][-1])
         lin = int(np.sum(h["linear_iterations"]))
         all_converged &= inner.converged

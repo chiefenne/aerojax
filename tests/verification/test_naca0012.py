@@ -92,3 +92,21 @@ def test_vortex_correction_recovers_far_farfield_lift():
     cl_corrected = euler_lift(near, True)
     assert abs(cl_corrected - cl_far) < abs(cl_near - cl_far)
     assert cl_corrected == pytest.approx(cl_far, rel=0.02)
+
+
+@pytest.mark.slow
+def test_naca0012_pyaero_mesh_alpha10():
+    """PyAero y+ = 1 mesh (100k cells), Re 6e6, 10 deg, vortex correction (D54):
+    C_L -0.9 %, viscous drag +1.6 %, pressure drag +13 % vs TMR; about 8 min."""
+    from pathlib import Path
+
+    from aerojax.mesh import read_su2
+
+    mesh = read_su2(
+        Path(__file__).parents[2] / "examples/meshes/naca0012_pyaero_100k_y1.su2"
+    )
+    r = naca0012.solve(10.0, mesh=mesh, vortex_correction=True)
+    assert r.converged
+    assert r.cl == pytest.approx(r.reference["cl"], rel=0.02)
+    assert r.cd_viscous == pytest.approx(r.reference["cd_viscous"], rel=0.05)
+    assert r.cd == pytest.approx(r.reference["cd"], rel=0.10)

@@ -38,7 +38,7 @@ turbulence = { nu_tilde_ratio = 3.0 }
 
 [numerics]
 limiter = "venkatakrishnan"       # local threshold: stable in thin wall cells on curved walls
-limiter_freeze = { after_residual_drop = 1.5, after_iterations = 40 }
+limiter_freeze = { after_residual_drop = 1.5, after_iterations = 40, release = true }   # unlimited after the start-up (D54)
 
 [solver]
 residual_drop = 7.0

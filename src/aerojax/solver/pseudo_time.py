@@ -83,6 +83,14 @@ class PseudoTimeSettings:
         GMRES restart length in the Newton-Krylov phase.
     nk_max_krylov : int
         Maximum GMRES iterations per Newton step.
+    nk_forcing : bool
+        Eisenstat-Walker forcing: the GMRES tolerance of a Newton step is
+        0.9 (|R_k| / |R_{k-1}|)^2, bounded by ``nk_linear_tolerance`` from
+        below and 0.5 from above, so that the linear solve is only as
+        accurate as the nonlinear progress warrants (Knoll & Keyes 2004).
+    line_search_steps : int
+        Backtracking: an update that raises the residual measure is halved
+        up to this many times before it is rejected (D54).
     nk_cfl_adapt_iterations : int
         GMRES iteration count above which the CFL of the Newton-Krylov phase
         is capped (quartered) for the following steps, and a quarter of
@@ -114,6 +122,8 @@ class PseudoTimeSettings:
     nk_max_krylov: int = 200
     nk_refactor_interval: int = 1
     nk_cfl_adapt_iterations: int = 60
+    nk_forcing: bool = True
+    line_search_steps: int = 2
     linear: LinearSettings = LinearSettings()
 
 
@@ -128,7 +138,8 @@ class SteadyResult(NamedTuple):
         True if the residual dropped by ``residual_drop`` orders.
     history : dict of str to ndarray
         Per iteration: ``iteration``, ``residual`` (RMS norm after the
-        iteration), ``residuals`` (RMS norm per variable), ``cfl``,
+        iteration), ``measure`` (per-equation convergence measure, D54),
+        ``residuals`` (RMS norm per variable), ``cfl``,
         ``accepted``, ``newton_krylov`` (phase flag), ``linear_iterations``
         (GMRES iterations of the step, 0 for a direct solve).
     """
@@ -182,9 +193,20 @@ def solve_steady(
     jvp : callable, optional
         ``jvp(u, du) -> dR/du(u) @ du`` of the full residual; enables the
         Newton-Krylov phase.
-    reference_norm : float, optional
-        Residual norm that ``residual_drop`` and the Newton-Krylov switch
-        refer to; default the norm of the initial residual.
+    reference_norm : array, optional
+        Per-variable residual norms that ``residual_drop`` and the
+        Newton-Krylov switch refer to; default the norms of the initial
+        residual.
+
+    Convergence is measured per equation (D54): every variable's RMS
+    residual is divided by the largest value it has had so far (or by
+    ``reference_norm``), and the residual measure is the maximum of these
+    ratios, so that an equation whose residual is small in absolute terms
+    (the turbulence equation) still has to converge. Variables whose peak
+    residual stays below 10^-6 of the largest peak (round-off residuals of a
+    symmetric or one-dimensional problem) are left out. Step acceptance,
+    the line search, the CFL control and the forcing term use the plain RMS
+    norm of the whole residual, as before.
 
     Returns
     -------
@@ -199,16 +221,26 @@ def solve_steady(
         return np.asarray(residual(u))
 
     r = res(u, 1)
-    norm = rms(r)
-    norm0 = max(
-        norm if reference_norm is None else reference_norm, np.finfo(float).tiny
+    tiny = np.finfo(float).tiny
+    scale = np.maximum(
+        rms_per_variable(r) if reference_norm is None else np.asarray(reference_norm),
+        tiny,
     )
-    target = norm0 * 10.0 ** (-s.residual_drop)
-    nk_threshold = norm0 * 10.0 ** (-s.nk_switch_residual_drop)
+
+    def measure(r):
+        active = scale >= 1e-6 * scale.max()
+        return float(np.max(np.where(active, rms_per_variable(r) / scale, 0.0)))
+
+    norm_abs = rms(r)
+    norm = measure(r)
+    target = 10.0 ** (-s.residual_drop)
+    nk_threshold = 10.0 ** (-s.nk_switch_residual_drop)
     cfl = s.cfl_start
+    eta = s.nk_linear_tolerance
     hist = {
         "iteration": [0],
-        "residual": [norm],
+        "residual": [norm_abs],
+        "measure": [norm],
         "residuals": [rms_per_variable(r)],
         "cfl": [cfl],
         "accepted": [True],
@@ -254,17 +286,28 @@ def solve_steady(
                     _newton_operator(t_matrix, jvp, u),
                     -r.ravel(),
                     lin.precondition,
-                    tolerance=s.nk_linear_tolerance,
+                    tolerance=eta if s.nk_forcing else s.nk_linear_tolerance,
                     restart=s.nk_restart,
                     max_iterations=s.nk_max_krylov,
                 )
             else:
                 du = lin.solve(-r.ravel())
                 lin_its = lin.iterations
-            u_new = u + du.reshape(u.shape)
+            du = du.reshape(u.shape)
+            u_new = u + du
             r_new = res(u_new, it + 1)
-            norm_new = rms(r_new)
-            accepted = np.isfinite(norm_new) and norm_new <= s.reject_factor * norm
+            abs_new = rms(r_new)
+            # Backtracking line search (D54): halve a step that raises the
+            # residual norm before giving up on it.
+            step = 1.0
+            for _ in range(s.line_search_steps):
+                if np.isfinite(abs_new) and abs_new <= norm_abs:
+                    break
+                step *= 0.5
+                u_new = u + step * du
+                r_new = res(u_new, it + 1)
+                abs_new = rms(r_new)
+            accepted = np.isfinite(abs_new) and abs_new <= s.reject_factor * norm_abs
         except LinearSolverError:
             pass
         hist["iteration"].append(it)
@@ -273,7 +316,7 @@ def solve_steady(
         hist["newton_krylov"].append(use_nk)
         hist["linear_iterations"].append(lin_its)
         if accepted:
-            ratio = norm / max(norm_new, np.finfo(float).tiny)
+            ratio = norm_abs / max(abs_new, tiny)
             if ratio > 1.0:
                 ratio = max(ratio, s.growth_factor)
             if use_nk:
@@ -282,12 +325,20 @@ def solve_steady(
                 elif lin_its <= s.nk_cfl_adapt_iterations // 4:
                     cfl_cap = min(cfl_cap * 4.0, s.cfl_max)
             cfl = min(cfl_cap, cfl * ratio)
-            u, r, norm = u_new, r_new, norm_new
+            if use_nk:
+                eta = min(
+                    0.5, max(s.nk_linear_tolerance, 0.9 * (abs_new / norm_abs) ** 2)
+                )
+            u, r, norm_abs = u_new, r_new, abs_new
+            # Peaks of the per-variable residuals set the scales (D54).
+            scale = np.maximum(scale, rms_per_variable(r))
+            norm = measure(r)
             converged = norm <= target
         else:
             cfl *= s.cut_factor
             lin = None  # rebuild the preconditioner after a rejection
-        hist["residual"].append(norm)
+        hist["residual"].append(norm_abs)
+        hist["measure"].append(norm)
         hist["residuals"].append(rms_per_variable(r))
         if callback is not None:
             info = getattr(callback, "info", None)

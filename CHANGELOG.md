@@ -19,6 +19,15 @@
   viscous drag close to TMR, pressure drag too high on the coarse O-grid
   wake (see docs/requirements.md D40). PyAero meshes (boundary faces
   `airfoil`, `farfield`) can be used directly.
+- Numerics standard for subsonic RANS (D54): limiter released after the
+  start-up (`limiter_freeze.release`), per-equation convergence measure
+  (each residual relative to its own peak, worst equation decides),
+  backtracking line search, Eisenstat–Walker forcing and an adaptive CFL
+  cap in the Newton phase. On the PyAero y⁺ = 1 mesh of the NACA 0012
+  (100k cells, Re 6e6, α = 0) this converges 13 orders in 44 iterations
+  with quadratic Newton convergence; C_D = 0.00828 vs TMR 0.00819, and at
+  α = 10° with the vortex correction C_L = 1.0807 vs 1.0909 (TOML case
+  `examples/cases/naca0012_pyaero_rans.toml`).
 - Point-vortex farfield correction (P10, `reference.vortex_correction`):
   freestream plus the lift-induced velocity of a vortex at the moment
   centre, pressure from Bernoulli; removes the farfield error of the lift on

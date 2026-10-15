@@ -193,6 +193,13 @@ SCHEMA = {
                 "Freeze the limiter after this residual drop (orders)",
                 minimum=0.0,
             ),
+            "release": Opt(
+                "bool",
+                False,
+                "Release the limiter (unlimited second order) instead of "
+                "freezing it: the standard for subsonic flows after a limited "
+                "start-up",
+            ),
         },
         "beta_factor": Opt(
             "float",
