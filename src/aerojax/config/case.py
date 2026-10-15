@@ -214,7 +214,7 @@ def _resolve_boundary(name, values, explicit, problems):
     return out
 
 
-LAMINAR_REGION_KEYS = ("boundary", "side", "x_min", "x_max", "y_min", "y_max")
+LAMINAR_REGION_KEYS = ("boundary", "side", "x_min", "x_max", "y_min", "y_max", "ramp")
 
 
 def _turbulence_table(holder, dotted, problems):

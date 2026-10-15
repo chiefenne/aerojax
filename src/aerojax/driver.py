@@ -173,7 +173,12 @@ class IncompressibleProblem:
         self._fb = partial(self.physics.boundary_flux, model)
 
     def _production_switch(self, mesh, conditions, regions):
-        """1 where SA production is active, 0 in the laminar regions (D15)."""
+        """1 where SA production is active, 0 in the laminar regions (D15).
+
+        A region's optional ``ramp`` (length) blends the switch linearly over
+        that distance inside each x/y bound instead of cutting it off, which
+        keeps the SA source differentiable across the transition front.
+        """
         switch = np.ones(mesh.n_cells)
         face_boundary = np.full(mesh.n_faces, "", dtype=object)
         for name, faces in mesh.boundary_faces.items():
@@ -193,15 +198,21 @@ class IncompressibleProblem:
                 # Upper surface: the fluid lies above the wall, the domain
                 # normal points down.
                 sel &= (ny < 0.0) if side == "upper" else (ny > 0.0)
-            for key, arr, op in (
-                ("x_min", x, np.greater_equal),
-                ("x_max", x, np.less_equal),
-                ("y_min", y, np.greater_equal),
-                ("y_max", y, np.less_equal),
+            ramp = float(region.get("ramp") or 0.0)
+            inside = np.ones(mesh.n_cells)  # 1 fully inside the bounds, 0 outside
+            for key, arr, sign in (
+                ("x_min", x, 1.0),
+                ("x_max", x, -1.0),
+                ("y_min", y, 1.0),
+                ("y_max", y, -1.0),
             ):
                 if region.get(key) is not None:
-                    sel &= op(arr, region[key])
-            switch[sel] = 0.0
+                    margin = sign * (arr - region[key])  # > 0 inside the bound
+                    if ramp > 0.0:
+                        inside *= np.clip(margin / ramp, 0.0, 1.0)
+                    else:
+                        inside *= margin >= 0.0
+            switch[sel] = np.minimum(switch[sel], 1.0 - inside[sel])
         return switch
 
     # -- setup checks -------------------------------------------------------

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.7 – Restarts, polars, validation on the PyAero mesh (not yet tagged)
+
+- Restart files (`<name>.restart.npz`, `initial.restart`) and `aerojax polar`
+  (angle sweep as a restart chain, merged `<name>.polar.csv`).
+- Laminar regions: `ramp` blends the SA production in over a length.
+- Validation of the fully turbulent NACA 0012 polar on the PyAero y⁺ = 1
+  mesh against Ladson (NASA TM 4074) and of the C_p at 10° against Gregory
+  & O'Reilly; packaged data `naca0012_ladson_re6e6_tripped.csv`,
+  `naca0012_gregory_cp.csv`, `naca0012_abbott_re6e6_smooth.csv`; example
+  `examples/stage6_pyaero_validation.py`; prescribed-transition case
+  `examples/cases/naca0012_pyaero_transition.toml`; `docs/pyaero.md`
+  sections on polars, transition and validation.
+
 ## 0.6 – Stage 6: NACA 0012 (2026-10-15)
 
 - Airfoil O-grid generator (`aerojax.mesh.airfoil`): TMR NACA 0012

@@ -67,7 +67,8 @@ SCHEMA = {
                 "table_list",
                 None,
                 "Regions without turbulence production: tables with boundary, "
-                "optional side (upper/lower), x_min, x_max, y_min, y_max",
+                "optional side (upper/lower), x_min, x_max, y_min, y_max and "
+                "ramp (blending length at the bounds)",
                 "m",
             ),
         },

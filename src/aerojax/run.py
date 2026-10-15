@@ -221,7 +221,7 @@ def setup(config, mesh=None):
             {
                 k: (
                     v / scaling.length
-                    if k in ("x_min", "x_max", "y_min", "y_max")
+                    if k in ("x_min", "x_max", "y_min", "y_max", "ramp")
                     else v
                 )
                 for k, v in region.items()
@@ -745,7 +745,9 @@ def run_polar(path, angles, console=True):
 
     Every farfield boundary and ``reference.angle_of_attack`` take the angle;
     each run writes into ``<output.directory>/alpha_<angle>`` and the
-    coefficients are collected in ``<output.directory>/<name>.polar.csv``.
+    coefficients are collected in ``<output.directory>/<name>.polar.csv``
+    (merged with earlier angles). The first angle restarts from the nearest
+    angle computed before, if any.
 
     Returns
     -------
@@ -756,8 +758,12 @@ def run_polar(path, angles, console=True):
     base = load_case(path)
     out_dir = base.resolve_path(base.data["output"]["directory"])
     out_dir.mkdir(parents=True, exist_ok=True)
-    rows, results, previous = [], [], None
+    polar_csv = out_dir / f"{base.name}.polar.csv"
+    rows = _read_polar(polar_csv)
+    results, previous = [], None
     for alpha in angles:
+        if previous is None:  # restart from the nearest angle computed before
+            previous = _nearest_restart(out_dir, base.name, alpha)
         case = copy.deepcopy(raw)
         for b in case.get("boundary", {}).values():
             if b.get("type") == "farfield":
@@ -773,6 +779,7 @@ def run_polar(path, angles, console=True):
         result = run_case(config, console=console)
         previous = result.output_dir / f"{config.name}.restart.npz"
         c = result.coefficients
+        rows = [r for r in rows if abs(r[0] - alpha) > 1e-9]
         rows.append(
             (
                 alpha,
@@ -788,8 +795,9 @@ def run_polar(path, angles, console=True):
             )
         )
         results.append(result)
+        rows.sort(key=lambda r: r[0])
         np.savetxt(
-            out_dir / f"{base.name}.polar.csv",
+            polar_csv,
             np.array(rows, dtype=float),
             delimiter=",",
             header="alpha,CL,CD,CD_pressure,CD_viscous,CM,iterations,converged",
@@ -797,3 +805,24 @@ def run_polar(path, angles, console=True):
             fmt=["%.4f", "%.8e", "%.8e", "%.8e", "%.8e", "%.8e", "%d", "%d"],
         )
     return results
+
+
+def _read_polar(path):
+    if not path.exists():
+        return []
+    data = np.atleast_2d(np.loadtxt(path, delimiter=",", skiprows=1))
+    return [tuple(row) for row in data] if data.size else []
+
+
+def _nearest_restart(out_dir, name, alpha):
+    """Restart file of the previously computed angle nearest to ``alpha``."""
+    best = None
+    for d in out_dir.glob("alpha_*"):
+        try:
+            a = float(d.name[6:])
+        except ValueError:
+            continue
+        file = d / f"{name}_alpha_{a:g}.restart.npz"
+        if file.exists() and (best is None or abs(a - alpha) < abs(best[0] - alpha)):
+            best = (a, file)
+    return None if best is None else best[1]

@@ -196,7 +196,7 @@ case file (D42).
 | Key | Type | Default | Description | # |
 |-----|------|---------|-------------|---|
 | `mode` | `"none"` \| `"prescribed"` | `"none"` | `"none"` = fully turbulent | D15 |
-| `laminar_region` | array of tables | – | Regions where SA production is switched off, e.g. `[{ boundary = "airfoil", side = "upper", x_max = 0.35 }]`: cells whose nearest wall face belongs to `boundary` (required), optionally only on one `side` (`"upper"`: the fluid lies above the wall, `"lower"`: below) and within `x_min`, `x_max`, `y_min`, `y_max` (m) | D15 |
+| `laminar_region` | array of tables | – | Regions where SA production is switched off, e.g. `[{ boundary = "airfoil", side = "upper", x_max = 0.35 }]`: cells whose nearest wall face belongs to `boundary` (required), optionally only on one `side` (`"upper"`: the fluid lies above the wall, `"lower"`: below) and within `x_min`, `x_max`, `y_min`, `y_max` (m); `ramp` (m) blends the production in linearly over that distance inside each bound instead of a hard cut, which keeps the SA source differentiable at the transition front | D15 |
 
 ### `[fluid]`
 
@@ -220,7 +220,7 @@ Either explicit values or `from_boundary`, not both.
 | `pressure` | float | – | Gauge pressure in Pa | D16 |
 | `turbulence` | table | ν̃/ν = 3 | See [Turbulence values](#turbulence-values) | D16, D33 |
 | `from_boundary` | string | name of the farfield boundary, if exactly one exists | Uniform field equal to the state of this boundary | D28 |
-| `restart` | path | – | Start from a previous solution (later) | |
+| `restart` | path | – | Restart file `<name>.restart.npz` of a previous run on the same mesh (relative to the case file); overrides `velocity`/`pressure`/`from_boundary` for the field. The mesh is checked by a fingerprint; a laminar restart used for a RANS case keeps the default ν̃. `aerojax polar case.toml --alpha 0 4 8` runs an angle sweep as a restart chain and writes `<name>.polar.csv` | D45 |
 
 If `[initial]` is missing and the case has no single farfield boundary, the
 case is rejected with a message asking for `[initial]`.

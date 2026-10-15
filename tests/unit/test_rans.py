@@ -73,6 +73,16 @@ def test_laminar_region_switch():
     assert np.all(switch[x > 0.6] == 1.0) and np.all(
         switch[(x > 0.0) & (x < 0.4)] == 0.0
     )
+    ramped = IncompressibleProblem(
+        mesh,
+        model,
+        conditions,
+        laminar_regions=[{"boundary": "plate", "x_max": 0.5, "ramp": 0.4}],
+    )
+    sw = np.asarray(ramped.geom.production_switch)
+    inside = (x > 0.0) & (x < 0.5)
+    expected = 1.0 - np.clip((0.5 - x[inside]) / 0.4, 0.0, 1.0)
+    np.testing.assert_allclose(sw[inside], expected)
     assert problem.initial_state((1.0, 0.0)).shape == (mesh.n_cells, 4)
     with pytest.raises(ValueError, match="unknown boundary"):
         IncompressibleProblem(

@@ -223,7 +223,69 @@ peak, the worst equation must drop `residual_drop` orders); with
   coefficients per iteration.
 - `<name>.resolved.toml`: every setting with its value and source.
 
-## 6. Reference points from stage 6
+## 6. Polars and restarts
+
+Every run writes `<name>.restart.npz`; `initial.restart = "<file>"` starts
+from it (same mesh, checked by a fingerprint). An angle-of-attack sweep is
+one command:
+
+```
+aerojax polar examples/cases/naca0012_pyaero_rans.toml --alpha 0 4 8 10 12
+```
+
+Each angle restarts from the previous one (about 35 instead of 44
+iterations), the runs land in `output/.../alpha_<α>/`, and
+`<name>.polar.csv` collects α, CL, CD, CDp, CDv, CM. Angles added later are
+merged into the file and start from the nearest angle already computed.
+
+## 7. Transition
+
+The SA model is fully turbulent. Until a transition model exists (L3),
+transition is prescribed: SA production is switched off in laminar regions
+given per surface side and chordwise bound, with the location from XFOIL's
+e^N method or from experiment (`examples/cases/naca0012_pyaero_transition.toml`):
+
+```toml
+[physics.transition]
+mode = "prescribed"
+laminar_region = [
+  { boundary = "airfoil", side = "upper", x_max = 0.45, ramp = 0.02 },
+  { boundary = "airfoil", side = "lower", x_max = 0.45, ramp = 0.02 },
+]
+```
+
+`ramp` blends the production in over the given length (metres) instead of a
+hard cut; with the hard cut the Newton phase stalled at a residual of 10⁻⁷
+on the stage-6 mesh (a discontinuous source), with the coefficients
+converged all the same. At Re 6·10⁶, α = 0, transition at 0.45 gave
+CD = 0.0053 (pressure 0.0010, viscous 0.0043) against 0.0083 fully
+turbulent, Abbott & von Doenhoff's smooth-airfoil value of 0.0058 and
+Ladson's tripped 0.0081 — the drag is as sensitive to the transition
+location as expected, so the location must come from a boundary-layer
+method, not from a guess. This is the state of the art for model-aircraft
+and glider Reynolds numbers until L3.
+
+## 8. Validation on the stage-6 mesh (fully turbulent, Re 6·10⁶)
+
+`python examples/stage6_pyaero_validation.py` runs the polar and plots it
+against Ladson's tripped data (NASA TM 4074) and the TMR SA values, with
+the C_p at 10° against Gregory & O'Reilly (NASA R&M 3726, Re 2.88·10⁶):
+
+| α | CL | Ladson (80/120 grit) | CD | Ladson | CD pressure / viscous |
+|---|---|---|---|---|---|
+| 0° | 0.0000 | −0.007 / −0.012 | 0.00828 | 0.00809 / 0.00807 | 0.00133 / 0.00694 |
+| 4° | 0.4447 | 0.427 / 0.428 | 0.00893 | 0.00823 / 0.00876 | 0.00206 / 0.00687 |
+| 8° | 0.8763 | 0.856 / 0.862 | 0.01116 | 0.01028 / 0.00989 | 0.00460 / 0.00656 |
+| 10° | 1.0807 | 1.059 / 1.067 | 0.01317 | 0.01191 / 0.01166 | 0.00687 / 0.00630 |
+| 12° | 1.2710 | 1.249 / 1.259 | 0.01612 | 0.01321 / 0.01277 | 0.01016 / 0.00596 |
+
+Lift within 1–4 % of the experiment (TMR's SA itself is +2.6 % at 10°),
+C_p at 10° within 0.02 of Gregory & O'Reilly for x/c > 0.05, the viscous
+drag within 2 % of TMR; the pressure drag grows above the data with α
+(+12 % total at 10°, +24 % at 12°) — the 5-chord farfield and y⁺ = 2.5 at
+the suction peak, both mesh items.
+
+## 9. Reference points from stage 6
 
 PyAero C-mesh, 100k cells, y₁ = 5·10⁻⁶ m, farfield 5 chords, outlet 25
 chords, Re 6·10⁶, SA-neg, vortex correction:
@@ -237,7 +299,7 @@ TMR's values are compressible at M = 0.15, which raises the lift by about
 1 % (Prandtl–Glauert); the remaining pressure-drag excess at 10° goes with
 the 5-chord farfield and y⁺ = 2.5 at the suction peak.
 
-## 7. Current limits
+## 10. Current limits
 
 - Fully turbulent SA or prescribed transition only; no transition model
   yet (planned, L3). At model-aircraft Reynolds numbers (10⁵–5·10⁵) a fully
@@ -248,5 +310,3 @@ the 5-chord farfield and y⁺ = 2.5 at the suction peak.
 - Run time grows with the sparse LU factorization: ~7–10 s per iteration at
   100k cells on two cores; above ~150k cells `linear_solver.type =
   "gmres-ilu"` is the cheaper choice (P13 for a stronger preconditioner).
-- No restart from a previous solution from the case file yet (the Python
-  API takes `w0`); α sweeps start from freestream at every angle.
