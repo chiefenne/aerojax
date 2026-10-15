@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.6 – Stage 6: NACA 0012 (not yet tagged)
+## 0.6 – Stage 6: NACA 0012 (2026-10-15)
 
 - Airfoil O-grid generator (`aerojax.mesh.airfoil`): TMR NACA 0012
   definition, cosine surface spacing with a small blunt trailing edge
@@ -36,6 +36,8 @@
 - PyAero mesh of the NACA 0012 (`examples/meshes/naca0012_pyaero_50k.su2`,
   C-type, 52k cells) read and run as is; its wall spacing suits laminar
   flow (y⁺ ≈ 900 at Re 6e6, see docs/requirements.md).
+- Documentation: `docs/pyaero.md`, the PyAero-to-aerojax workflow (first
+  layer from y⁺, farfield distance, case file, log, limits).
 - Examples: `examples/stage6_naca0012.py`, TOML cases
   `examples/cases/naca0012_rans.toml` and `naca0012_pyaero_euler.toml`.
 

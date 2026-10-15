@@ -1,0 +1,252 @@
+# From a PyAero mesh to an aerojax result
+
+This page is the workflow for airfoil cases: mesh settings in PyAero that the
+solver depends on, the case file, what to look at in the log and the output,
+and the current limits. The reference values quoted come from the NACA 0012
+runs of stage 6 (`docs/requirements.md`, D40 and D54).
+
+## 1. What the solver needs from the mesh
+
+- An `.su2` file in **metres** (PyAero's export). Quadrilaterals, triangles
+  and mixed cells are all fine; PyAero's C-type quad meshes are the intended
+  input.
+- Boundary names as PyAero writes them: `airfoil`, `inlet` (the C-arc),
+  `outlet`, `top`, `bottom`. Nothing is renamed; the case file assigns a
+  condition to each name. Every boundary face must belong to exactly one
+  named set (the reader checks this).
+- The chord length in metres goes into `reference.length`; the Reynolds
+  number is set either through `fluid.reynolds_number` (with `reference.
+  velocity` and `reference.length`) or through `fluid.viscosity`.
+
+## 2. PyAero settings that matter
+
+**First layer thickness (the one that decides whether a RANS result is
+valid).** The SA model is wall-resolved: the first cell centre must sit at
+y⁺ ≈ 1. With the first cell height y₁ (the PyAero value, in metres), the
+chord c and the skin-friction coefficient C_f,
+
+    y⁺ = (y₁ / 2) · (Re / c) · √(C_f / 2)        (cell centre at y₁ / 2)
+
+so for y⁺ = 1 at the centre:
+
+| Re (chord) | C_f (mid-chord, turbulent) | y₁ / c |
+|---|---|---|
+| 1·10⁵ | 0.0066 | 3.5·10⁻⁴ |
+| 2·10⁵ | 0.0058 | 1.9·10⁻⁴ |
+| 5·10⁵ | 0.0048 | 8·10⁻⁵ |
+| 1·10⁶ | 0.0042 | 4.5·10⁻⁵ |
+| 6·10⁶ | 0.0029 | 9·10⁻⁶ |
+
+Halve these for y⁺ ≈ 0.5, which is what the stage-6 mesh used at Re 6·10⁶
+(y₁ = 5·10⁻⁶ m, y⁺ = 0.6 at α = 0 and 2.5 at the 10° suction peak). After a
+run, the wall CSV column `y_plus` shows the actual values; the maximum should
+stay below about 2–3. A mesh with y⁺ ≈ 12 gave the viscous drag 40 % too low
+and the lift 7 % too low — the error is silent, so check the column.
+
+**Growth ratio and number of layers.** Growth ≤ 1.15–1.2 normal to the
+wall, and enough layers to put ~50 cells across the boundary layer, which is
+about 0.02–0.03 c thick at the trailing edge of a fully turbulent airfoil
+at Re 6·10⁶: from y₁ = 5·10⁻⁶ c with growth 1.15, 50 layers reach 0.036 c.
+
+**Cell aspect ratio.** Not a concern: wall cells with aspect ratios of
+1000–3000 are standard in wall-resolved RANS meshes (TMR's grids reach
+~2000); the scheme handles stretching, not skewness. Keep the layers
+orthogonal to the surface, which PyAero does.
+
+**Surface points.** 200–300 nodes around the airfoil with clustering at the
+leading and trailing edges correspond to TMR's medium grids, where the lift
+is within ~0.2 % of the grid-converged value; the pressure drag converges
+more slowly with the surface and wake resolution. PyAero's blunt trailing
+edge is fine (the solver's own O-grid uses a 0.14 % base for the same
+reason: a sharp trailing edge produces a fan of nearly flat cells).
+
+**Farfield distance.** The farfield condition is a freestream state; its
+distance biases the lift. Measured with the inviscid NACA 0012 at 10°:
+C-arc at 3.5 chords −6.4 % against a 500-chord domain, −2.9 % with the
+point-vortex correction; a 10-chord O-grid with the correction is within
+0.1 %. Recommendation: C-arc and top/bottom at 20–50 chords, outlet at
+25–50 chords, and `reference.vortex_correction = true`. At 5 chords (the
+stage-6 mesh) the correction still leaves about 1 % on the lift.
+
+**Wake block.** The refined wake block follows the chord; at angle of
+attack the wake leaves it after one or two chords, which is acceptable
+because the wake is thin only near the trailing edge. Keep the airfoil
+unrotated so that one mesh serves all angles.
+
+## 3. The case file
+
+RANS at Re 6·10⁶, α = 10°, with the stage-6 numerics (D54). This is
+`examples/cases/naca0012_pyaero_rans.toml` with the comments reduced:
+
+```toml
+[case]
+name = "naca0012_pyaero_rans"
+
+[mesh]
+file = "../meshes/naca0012_pyaero_100k_y1.su2"
+
+[physics]
+model = "rans"                    # "laminar" or "euler" for the other models
+turbulence = "sa-neg"
+
+[fluid]
+density = 1.0                     # kg/m^3
+viscosity = 1.6666667e-7          # Pa s: Re = 6e6 with U = 1 m/s, c = 1 m
+# or: reynolds_number = 6.0e6 together with reference.velocity and length
+
+[reference]
+velocity = 1.0                    # m/s
+length = 1.0                      # m, chord; CL, CD, CM use q c
+moment_center = [0.25, 0.0]       # m, quarter chord (also the vortex location)
+vortex_correction = true
+
+[initial]
+from_boundary = "inlet"           # uniform freestream
+
+[boundary.airfoil]
+type = "wall"
+
+[boundary.inlet]                  # PyAero's C-arc; outlet, top, bottom identical
+type = "farfield"
+velocity = 1.0                    # m/s
+angle_of_attack = 10.0            # deg
+pressure = 0.0                    # Pa
+turbulence = { nu_tilde_ratio = 3.0 }
+
+[boundary.outlet]
+type = "farfield"
+velocity = 1.0
+angle_of_attack = 10.0
+pressure = 0.0
+turbulence = { nu_tilde_ratio = 3.0 }
+
+[boundary.top]
+type = "farfield"
+velocity = 1.0
+angle_of_attack = 10.0
+pressure = 0.0
+turbulence = { nu_tilde_ratio = 3.0 }
+
+[boundary.bottom]
+type = "farfield"
+velocity = 1.0
+angle_of_attack = 10.0
+pressure = 0.0
+turbulence = { nu_tilde_ratio = 3.0 }
+
+[numerics]
+limiter = "venkatakrishnan"       # local threshold: stabilises the start-up
+limiter_freeze = { after_residual_drop = 1.5, after_iterations = 40, release = true }
+
+[solver]
+residual_drop = 7.0
+max_iterations = 400
+newton_krylov = { switch_at_residual_drop = 1.5, switch_at_iteration = 40 }
+
+[output]
+directory = "output/naca0012_pyaero_rans"
+force_boundaries = ["airfoil"]
+```
+
+Notes on the choices:
+
+- All four outer boundaries are `farfield`; the condition switches between
+  inflow and outflow per face from the sign of the normal velocity, so it is
+  also right for the outlet. Identical farfield tables count as one
+  freestream (reference velocity, angle of attack, initial state and the Cp
+  reference pressure are taken from them).
+- The numerics block is the subsonic RANS standard (D54): the local
+  Venkatakrishnan limiter only stabilises the first iterations, after 1.5
+  orders or 40 iterations it is released (unlimited second order) and the
+  Newton–Krylov phase takes over. Do not freeze the limiter instead of
+  releasing it on this kind of mesh: the frozen limiter gave C_f 70 % too
+  high on the stage-6 mesh.
+- `nu_tilde_ratio = 3` is NASA TMR's farfield value; the equivalent ν_t/ν,
+  k and Tu are printed in the log's Turbulence section (D33 has the other
+  input forms).
+- For a laminar case drop `[physics].turbulence`, the `turbulence` tables
+  and `limiter_freeze`, set `model = "laminar"`; for an inviscid case
+  `model = "euler"` (walls become slip walls, no viscosity needed).
+- Prescribed transition (laminar region without SA production), e.g. from
+  an XFOIL transition location:
+
+  ```toml
+  [physics.transition]
+  mode = "prescribed"
+  laminar_region = [
+    { boundary = "airfoil", side = "upper", x_max = 0.35 },
+    { boundary = "airfoil", side = "lower", x_max = 0.55 },
+  ]
+  ```
+
+  `side = "upper"` means the fluid lies above the wall; `x_min`, `x_max`,
+  `y_min`, `y_max` are in metres.
+
+## 4. Running and reading the log
+
+```
+aerojax check case.toml      # validates, prints every setting with its default
+aerojax run case.toml        # writes <name>.log, .history.csv, .vtu, .wall_<boundary>.csv
+```
+
+The log (also readable with `tail -f`) has these parts:
+
+- **Configuration, Mesh, Boundary conditions, Turbulence**: the resolved
+  setup; the Turbulence section lists ν_t/ν and ν̃/ν per inflow boundary and
+  for the initial state, and warns outside TMR's range ν̃/ν = 3–5.
+- **Iteration lines**: `log(R_p) log(R_u) log(R_v) log(R_n)` are the RMS
+  residuals of continuity, momentum and the SA equation, `CFL` the
+  pseudo-time CFL, `NK` marks Newton–Krylov iterations with the GMRES count
+  next to it, then `CL CD CM`. The note column shows `limiter released`
+  (or `frozen`) and `rejected` updates. Expected pattern on a 100k-cell
+  mesh: 40 start-up iterations that bring the flow residuals down about
+  three orders while the turbulence field develops, then 4–10 Newton steps
+  with quadratic convergence (residuals drop one to two orders per step).
+  About 7–10 s per iteration on two cores at 100k cells; 44 iterations for
+  the stage-6 cases.
+- **Summary**: iterations, residual drop, CL/CD/CM with the pressure and
+  viscous drag split, the vortex circulation if the correction is on, and
+  the output paths.
+
+Convergence is judged per equation (each residual relative to its own
+peak, the worst equation must drop `residual_drop` orders); with
+`residual_drop = 7` the coefficients are converged to all printed digits.
+
+## 5. Output
+
+- `<name>.vtu` (ParaView): pressure, velocity, velocity magnitude, and with
+  a turbulence model `nu_tilde` and `eddy_viscosity_ratio` (ν_t/ν). A
+  converged airfoil at Re 6·10⁶ reaches ν_t/ν ≈ 800 in the wake.
+- `<name>.wall_airfoil.csv`: x, y, p, Cp, τ_x, τ_y, Cf, y⁺ per wall face —
+  the file for Cp and Cf plots and for the y⁺ check.
+- `<name>.history.csv`: residuals, CFL, Newton/GMRES counts and
+  coefficients per iteration.
+- `<name>.resolved.toml`: every setting with its value and source.
+
+## 6. Reference points from stage 6
+
+PyAero C-mesh, 100k cells, y₁ = 5·10⁻⁶ m, farfield 5 chords, outlet 25
+chords, Re 6·10⁶, SA-neg, vortex correction:
+
+| α | CL | CD | CD pressure | CD viscous | TMR (CFL3D) CL / CD |
+|---|---|---|---|---|---|
+| 0° | 0.0000 | 0.00828 | 0.00133 | 0.00694 | 0 / 0.00819 |
+| 10° | 1.0807 | 0.01317 | 0.00687 | 0.00630 | 1.0909 / 0.01231 |
+
+TMR's values are compressible at M = 0.15, which raises the lift by about
+1 % (Prandtl–Glauert); the remaining pressure-drag excess at 10° goes with
+the 5-chord farfield and y⁺ = 2.5 at the suction peak.
+
+## 7. Current limits
+
+- Fully turbulent SA or prescribed transition only; no transition model
+  yet (planned, L3). At model-aircraft Reynolds numbers (10⁵–5·10⁵) a fully
+  turbulent solution overpredicts the drag and misses laminar separation
+  bubbles.
+- Steady cases are verified; unsteady RANS (shedding at high Re) has not
+  been exercised.
+- Run time grows with the sparse LU factorization: ~7–10 s per iteration at
+  100k cells on two cores; above ~150k cells `linear_solver.type =
+  "gmres-ilu"` is the cheaper choice (P13 for a stronger preconditioner).
+- No restart from a previous solution from the case file yet (the Python
+  API takes `w0`); α sweeps start from freestream at every angle.
