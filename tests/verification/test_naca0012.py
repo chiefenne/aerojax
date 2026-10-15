@@ -24,8 +24,12 @@ def test_airfoil_geometry_and_ogrid():
 
 
 def test_naca0012_alpha10_coarse():
-    """128 x 64 O-grid, 500 chords: C_L -7 % (coarse farfield/wake resolution)."""
-    r = naca0012.solve(10.0, 128, 64)
+    """128 x 64 O-grid, 500 chords: C_L -7 % (coarse farfield/wake resolution).
+
+    The O-grid results keep the frozen limiter: on this grid (trailing-edge
+    fan, stretched outer cells) the unlimited solution of D54 converges
+    slowly and gives C_L -14 %; the PyAero C-mesh is the D54 reference."""
+    r = naca0012.solve(10.0, 128, 64, release_limiter=False)
     assert r.converged and r.y_plus_max < 2.0
     assert r.cl == pytest.approx(r.reference["cl"], rel=0.10)
     assert r.cd_viscous == pytest.approx(0.0057, abs=0.001)
@@ -37,7 +41,7 @@ def test_naca0012_alpha10_coarse():
 def test_naca0012_medium(alpha):
     """256 x 128 (33k cells): C_L within 2 % (-0.008, 1.076, 1.536); the drag
     is 13-45 % high, dominated by the pressure drag on the coarse O-grid wake."""
-    r = naca0012.solve(alpha, 256, 128)
+    r = naca0012.solve(alpha, 256, 128, release_limiter=False)
     # The first spacing is sized for C_f = 0.003; at the 15-degree suction
     # peak C_f is twice that and y+ reaches 2.2.
     assert r.converged and r.y_plus_max < (3.0 if alpha == 15.0 else 2.0)

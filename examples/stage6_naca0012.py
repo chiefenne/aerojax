@@ -29,7 +29,8 @@ def main():
     print(f"R2 NACA 0012, Re = 6e6, SA-neg, O-grid {n_surface}x{n_radial}, 500 chords")
     runs = {}
     for alpha in (0.0, 10.0):
-        r = naca0012.solve(alpha, n_surface, n_radial)
+        # Frozen limiter on the O-grid (see tests/verification/test_naca0012.py).
+        r = naca0012.solve(alpha, n_surface, n_radial, release_limiter=False)
         runs[alpha] = r
         ref = r.reference
         its = len(r.history["iteration"]) - 1
