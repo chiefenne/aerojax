@@ -142,3 +142,59 @@ def test_run_case_unsteady_couette(tmp_path):
     assert "inner  drop" in log and "time steps             10 (bdf2" in log
     head = (out / "couette_unsteady.history.csv").read_text().splitlines()[0]
     assert head.startswith("step,time,residual_p") and "inner_residual_drop" in head
+
+
+def test_restart_file_round_trip(case_dir):
+    """A restart from the converged state converges at once (D45)."""
+    first = run_case(case_dir / "couette.toml", console=False)
+    restart = first.output_dir / "couette_test.restart.npz"
+    assert restart.exists()
+    text = COUETTE.replace('name = "couette_test"', 'name = "couette_restart"').replace(
+        "[initial]\nvelocity = [0.0, 0.0]", f'[initial]\nrestart = "{restart}"'
+    )
+    (case_dir / "restart.toml").write_text(text)
+    second = run_case(case_dir / "restart.toml", console=False)
+    assert second.converged and second.history["iteration"][-1] <= 5
+    np.testing.assert_allclose(second.w, first.w, atol=1e-9)
+
+
+POLAR = """
+[case]
+name = "cyl"
+[mesh]
+file = "annulus.su2"
+[physics]
+model = "euler"
+[fluid]
+density = 1.0
+[reference]
+length = 1.0
+moment_center = [0.0, 0.0]
+[boundary.cylinder]
+type = "slip-wall"
+[boundary.farfield]
+type = "farfield"
+velocity = 1.0
+[numerics]
+limiter = "none"
+[solver]
+residual_drop = 5.0
+[output]
+directory = "out"
+"""
+
+
+def test_polar_runs_a_restart_chain(tmp_path):
+    from aerojax.mesh import annulus
+    from aerojax.run import run_polar
+
+    write_su2(tmp_path / "annulus.su2", annulus(32, 8, outer_radius=10.0, growth=1.3))
+    (tmp_path / "cyl.toml").write_text(POLAR)
+    results = run_polar(tmp_path / "cyl.toml", [0.0, 5.0], console=False)
+    assert len(results) == 2 and all(r.converged for r in results)
+    assert (tmp_path / "out" / "alpha_5" / "cyl_alpha_5.restart.npz").exists()
+    polar = np.genfromtxt(tmp_path / "out" / "cyl.polar.csv", delimiter=",", names=True)
+    assert list(polar["alpha"]) == [0.0, 5.0]
+    # Lift of a cylinder vanishes at every angle; the second run restarted.
+    assert abs(polar["CL"]).max() < 5e-3
+    assert main(["polar", str(tmp_path / "cyl.toml"), "--alpha", "0", "--quiet"]) == 0

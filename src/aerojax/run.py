@@ -6,15 +6,18 @@ is scaled by 1 / L_ref, velocities by 1 / U_ref, pressures by
 before output.
 """
 
+import copy
 import dataclasses
+import hashlib
 import math
+import tomllib
 from pathlib import Path
 from typing import NamedTuple
 
 import numpy as np
 
 from aerojax import __version__
-from aerojax.config import Resolved, load_case
+from aerojax.config import Resolved, load_case, resolve
 from aerojax.driver import INFLOW_TYPES, IncompressibleProblem
 from aerojax.io import HistoryWriter, RunLog, StepHistoryWriter, write_pvd, write_vtu
 from aerojax.mesh import Mesh, read_su2
@@ -247,17 +250,54 @@ def setup(config, mesh=None):
         nu_tilde = src.get("nu_tilde")
         if rans and init["turbulence"] is None and init["from_boundary"] in turbulence:
             turbulence["initial"] = turbulence[init["from_boundary"]]
-    else:
+    elif init["velocity"] is not None:
         velocity = tuple(v / scaling.velocity for v in init["velocity"])
         pressure = init["pressure"] / scaling.pressure
+    else:  # restart without an explicit initial state: freestream of 1
+        velocity, pressure = (1.0, 0.0), init["pressure"] / scaling.pressure
     if rans and "initial" not in turbulence:
         speed = math.hypot(*velocity) * scaling.velocity
         tv = turbulence_values(init["turbulence"], nu_si, speed)
         turbulence["initial"] = tv
         nu_tilde = tv.chi * mu_nd / rho_nd
     w0 = problem.initial_state(velocity, pressure, nu_tilde)
+    if init["restart"] is not None:
+        w0 = load_restart(config.resolve_path(init["restart"]), mesh, w0)
     problem.turbulence_values = turbulence
     return problem, scaling, w0, mesh
+
+
+def mesh_fingerprint(mesh):
+    """Hash of the cell centroids: identifies a mesh for restart files."""
+    data = np.ascontiguousarray(np.round(mesh.cell_centroid, 9))
+    return hashlib.sha1(data.tobytes()).hexdigest()[:16]
+
+
+def save_restart(path, mesh, w_nd):
+    """Write the non-dimensional state and the mesh fingerprint (D45)."""
+    np.savez(
+        path,
+        w=np.asarray(w_nd),
+        fingerprint=mesh_fingerprint(mesh),
+        n_cells=mesh.n_cells,
+        version=__version__,
+    )
+
+
+def load_restart(path, mesh, w_default):
+    """Read a restart file for ``mesh``; missing variables keep ``w_default``.
+
+    A laminar restart used for a RANS case keeps the default nu_tilde, a RANS
+    restart used for a laminar case drops it.
+    """
+    with np.load(path) as data:
+        if str(data["fingerprint"]) != mesh_fingerprint(mesh):
+            raise ValueError(f"restart file {path} belongs to a different mesh")
+        w = np.array(data["w"], dtype=float)
+    n = min(w.shape[1], w_default.shape[1])
+    w0 = np.array(w_default, dtype=float)
+    w0[:, :n] = w[:, :n]
+    return w0
 
 
 def run_case(path, console=True, mesh=None):
@@ -265,8 +305,8 @@ def run_case(path, console=True, mesh=None):
 
     Parameters
     ----------
-    path : str or Path
-        TOML case file.
+    path : str, Path or Resolved
+        TOML case file, or an already resolved configuration.
     console : bool
         Echo the log to stdout.
     mesh : Mesh, optional
@@ -276,7 +316,7 @@ def run_case(path, console=True, mesh=None):
     -------
     RunResult
     """
-    config = load_case(path)
+    config = path if isinstance(path, Resolved) else load_case(path)
     cfg = config.data
     out_dir = config.resolve_path(cfg["output"]["directory"])
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -296,6 +336,7 @@ def run_case(path, console=True, mesh=None):
             result, coefficients = _run_steady(
                 log, config, problem, scaling, w0, mesh, out_dir
             )
+    save_restart(out_dir / f"{name}.restart.npz", mesh, result.u)
     scale = [scaling.pressure, scaling.velocity, scaling.velocity]
     if problem.turbulent:
         scale.append(scaling.viscosity / scaling.density)
@@ -697,3 +738,62 @@ def _describe_boundary(b):
         if key != "type":
             parts.append(f"{key} = {value}")
     return ", ".join(parts)
+
+
+def run_polar(path, angles, console=True):
+    """Run a case at several angles of attack, restarting from the previous one.
+
+    Every farfield boundary and ``reference.angle_of_attack`` take the angle;
+    each run writes into ``<output.directory>/alpha_<angle>`` and the
+    coefficients are collected in ``<output.directory>/<name>.polar.csv``.
+
+    Returns
+    -------
+    list of RunResult
+    """
+    path = Path(path)
+    raw = tomllib.loads(path.read_text())
+    base = load_case(path)
+    out_dir = base.resolve_path(base.data["output"]["directory"])
+    out_dir.mkdir(parents=True, exist_ok=True)
+    rows, results, previous = [], [], None
+    for alpha in angles:
+        case = copy.deepcopy(raw)
+        for b in case.get("boundary", {}).values():
+            if b.get("type") == "farfield":
+                b["angle_of_attack"] = float(alpha)
+        case.setdefault("reference", {})["angle_of_attack"] = float(alpha)
+        case.setdefault("case", {})["name"] = f"{base.name}_alpha_{alpha:g}"
+        case.setdefault("output", {})["directory"] = str(
+            Path(base.data["output"]["directory"]) / f"alpha_{alpha:g}"
+        )
+        if previous is not None:
+            case.setdefault("initial", {})["restart"] = str(previous)
+        config = resolve(case, path)
+        result = run_case(config, console=console)
+        previous = result.output_dir / f"{config.name}.restart.npz"
+        c = result.coefficients
+        rows.append(
+            (
+                alpha,
+                c.cl,
+                c.cd,
+                c.cd_pressure,
+                c.cd_viscous,
+                c.cm,
+                int(result.history["iteration"][-1])
+                if "iteration" in result.history
+                else int(result.history["step"][-1]),
+                int(result.converged),
+            )
+        )
+        results.append(result)
+        np.savetxt(
+            out_dir / f"{base.name}.polar.csv",
+            np.array(rows, dtype=float),
+            delimiter=",",
+            header="alpha,CL,CD,CD_pressure,CD_viscous,CM,iterations,converged",
+            comments="",
+            fmt=["%.4f", "%.8e", "%.8e", "%.8e", "%.8e", "%.8e", "%d", "%d"],
+        )
+    return results

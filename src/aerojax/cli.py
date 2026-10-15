@@ -1,4 +1,4 @@
-"""Command line: ``aerojax run case.toml`` and ``aerojax check case.toml``."""
+"""Command line: ``aerojax run``, ``aerojax check`` and ``aerojax polar``."""
 
 import argparse
 import sys
@@ -20,6 +20,12 @@ def main(argv=None):
     run.add_argument("--quiet", action="store_true", help="no console output")
     check = sub.add_parser("check", help="validate a case and print the resolved file")
     check.add_argument("case", help="TOML case file")
+    polar = sub.add_parser(
+        "polar", help="run a case at several angles of attack (restart chain)"
+    )
+    polar.add_argument("case", help="TOML case file with farfield boundaries")
+    polar.add_argument("--alpha", nargs="+", type=float, required=True, help="deg")
+    polar.add_argument("--quiet", action="store_true", help="no console output")
     args = parser.parse_args(argv)
 
     try:
@@ -29,6 +35,11 @@ def main(argv=None):
             for note in config.notices:
                 print(f"# notice: {note}")
             return 0
+        if args.command == "polar":
+            from aerojax.run import run_polar
+
+            results = run_polar(args.case, args.alpha, console=not args.quiet)
+            return 0 if all(r.converged for r in results) else 2
         from aerojax.run import run_case
 
         result = run_case(args.case, console=not args.quiet)

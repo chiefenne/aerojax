@@ -96,6 +96,12 @@ SCHEMA = {
             "string", None, "Uniform initial field equal to this boundary's state"
         ),
         "turbulence": Opt("table", None, TURBULENCE_DESCRIPTION),
+        "restart": Opt(
+            "string",
+            None,
+            "Restart file (<name>.restart.npz of a previous run on the same "
+            "mesh), relative to the case file; overrides velocity/pressure",
+        ),
     },
     "reference": {
         "length": Opt(
@@ -406,7 +412,5 @@ BOUNDARY_TYPES = {
 }
 
 # Documented keys of later stages: rejected with a pointer to the stage.
-PLANNED = {
-    "initial.restart": "later",
-}
+PLANNED = {}
 PLANNED_BOUNDARY_TYPES = {}

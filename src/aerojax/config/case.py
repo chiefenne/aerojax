@@ -445,7 +445,15 @@ def _consistency(data, explicit, problems, notices, path):
         problems.append(
             "initial: give either from_boundary or explicit values, not both"
         )
-    if init["from_boundary"] is None and init["velocity"] is None:
+    if init["restart"] is not None and (
+        init["from_boundary"] is not None or init["velocity"] is not None
+    ):
+        notices.append("initial.restart given: velocity/from_boundary only set the pin")
+    if (
+        init["restart"] is None
+        and init["from_boundary"] is None
+        and init["velocity"] is None
+    ):
         if len(farfields) == 1:
             init["from_boundary"] = farfields[0]
             notices.append(

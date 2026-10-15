@@ -65,6 +65,9 @@ class PseudoTimeSettings:
         Maximum number of iterations, rejected ones included.
     residual_drop : float
         Convergence: orders of magnitude of residual reduction.
+    residual_floor : float
+        Absolute RMS residual below which the iteration counts as converged
+        regardless of the relative drop (a restart from a converged state).
     first_order_iterations : int
         Iterations evaluated with ``residual_startup`` before switching to
         ``residual`` (D36).
@@ -112,6 +115,7 @@ class PseudoTimeSettings:
     cfl_min: float = 1.0e-6
     max_iterations: int = 1000
     residual_drop: float = 8.0
+    residual_floor: float = 1.0e-14
     first_order_iterations: int = 0
     growth_factor: float = 2.0
     newton_krylov: bool = True
@@ -234,6 +238,10 @@ def solve_steady(
     norm_abs = rms(r)
     norm = measure(r)
     target = 10.0 ** (-s.residual_drop)
+
+    def done(norm, norm_abs):
+        return norm <= target or norm_abs <= s.residual_floor
+
     nk_threshold = 10.0 ** (-s.nk_switch_residual_drop)
     cfl = s.cfl_start
     eta = s.nk_linear_tolerance
@@ -247,7 +255,7 @@ def solve_steady(
         "newton_krylov": [False],
         "linear_iterations": [0],
     }
-    converged = norm <= target
+    converged = done(norm, norm_abs)
     if callback is not None:
         callback(0, u, hist["residuals"][0], cfl, True)
     lin, nk_steps_since_factor = None, 0
@@ -333,7 +341,7 @@ def solve_steady(
             # Peaks of the per-variable residuals set the scales (D54).
             scale = np.maximum(scale, rms_per_variable(r))
             norm = measure(r)
-            converged = norm <= target
+            converged = done(norm, norm_abs)
         else:
             cfl *= s.cut_factor
             lin = None  # rebuild the preconditioner after a rejection
