@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.7 – Restarts, polars, validation on the PyAero mesh (not yet tagged)
+## 0.7 – Restarts, polars, validation on the PyAero mesh (2026-10-15)
 
 - Restart files (`<name>.restart.npz`, `initial.restart`) and `aerojax polar`
   (angle sweep as a restart chain, merged `<name>.polar.csv`).
