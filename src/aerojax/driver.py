@@ -415,6 +415,7 @@ class IncompressibleProblem:
         freeze_limiter_after_iterations=None,
         freeze_limiter_after_residual_drop=None,
         vortex=None,
+        release_limiter=False,
     ):
         """Implicit pseudo-time solution (D25, D35).
 
@@ -423,7 +424,11 @@ class IncompressibleProblem:
         condition is met; afterwards the residual, its Jacobian-vector
         products and the solution use the limiter values of that state.
         With ``vortex`` (:meth:`farfield_vortex`) the farfield values are
-        updated from the lift after every accepted iteration (P10).
+        updated from the lift after every accepted iteration (P10). With
+        ``release_limiter`` the freeze sets the limiter to one instead
+        (unlimited second order after a limited start-up): for smooth
+        high-Reynolds-number flows the limiter only costs accuracy in the
+        boundary layer once the transient has passed.
         """
         w0 = self.initial_state() if w0 is None else w0
         state = {"beta2": self.beta2(w0), "psi": None, "norm0": None}
@@ -452,9 +457,15 @@ class IncompressibleProblem:
                     freeze_limiter_after_residual_drop is not None
                     and drop >= freeze_limiter_after_residual_drop
                 ):
-                    state["psi"] = self.limiter(w)
+                    state["psi"] = (
+                        jnp.ones_like(jnp.asarray(w))
+                        if release_limiter
+                        else self.limiter(w)
+                    )
                     if callback is not None and hasattr(callback, "info"):
-                        callback.info["note"] = "limiter frozen"
+                        callback.info["note"] = (
+                            "limiter released" if release_limiter else "limiter frozen"
+                        )
             if callback is not None:
                 callback(it, w, residuals, cfl, accepted)
 

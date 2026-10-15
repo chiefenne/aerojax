@@ -83,6 +83,11 @@ class PseudoTimeSettings:
         GMRES restart length in the Newton-Krylov phase.
     nk_max_krylov : int
         Maximum GMRES iterations per Newton step.
+    nk_cfl_adapt_iterations : int
+        GMRES iteration count above which the CFL of the Newton-Krylov phase
+        is capped (quartered) for the following steps, and a quarter of
+        which lets the cap grow again; keeps the first-order preconditioner
+        effective on stretched meshes (D52, P14).
     nk_refactor_interval : int
         In the Newton-Krylov phase, rebuild the preconditioner (first-order
         Jacobian plus pseudo-time term, factorized) only every n-th step and
@@ -108,6 +113,7 @@ class PseudoTimeSettings:
     nk_restart: int = 50
     nk_max_krylov: int = 200
     nk_refactor_interval: int = 1
+    nk_cfl_adapt_iterations: int = 60
     linear: LinearSettings = LinearSettings()
 
 
@@ -213,6 +219,10 @@ def solve_steady(
     if callback is not None:
         callback(0, u, hist["residuals"][0], cfl, True)
     lin, nk_steps_since_factor = None, 0
+    # CFL cap of the Newton-Krylov phase, adapted to the GMRES effort: the
+    # first-order preconditioner degrades as the pseudo-time term vanishes,
+    # so expensive linear solves lower the cap and cheap ones raise it.
+    cfl_cap = s.cfl_max
     for it in range(1, s.max_iterations + 1):
         if converged or cfl < s.cfl_min:
             break
@@ -266,7 +276,12 @@ def solve_steady(
             ratio = norm / max(norm_new, np.finfo(float).tiny)
             if ratio > 1.0:
                 ratio = max(ratio, s.growth_factor)
-            cfl = min(s.cfl_max, cfl * ratio)
+            if use_nk:
+                if lin_its >= s.nk_cfl_adapt_iterations:
+                    cfl_cap = max(cfl * 0.25, s.cfl_start)
+                elif lin_its <= s.nk_cfl_adapt_iterations // 4:
+                    cfl_cap = min(cfl_cap * 4.0, s.cfl_max)
+            cfl = min(cfl_cap, cfl * ratio)
             u, r, norm = u_new, r_new, norm_new
             converged = norm <= target
         else:

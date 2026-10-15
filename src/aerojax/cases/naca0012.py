@@ -67,6 +67,7 @@ def solve(
     callback=None,
     switch_iteration=40,
     vortex_correction=False,
+    release_limiter=False,
 ):
     """Run the NACA 0012 at the angle of attack ``alpha`` (degrees).
 
@@ -114,6 +115,7 @@ def solve(
         freeze_limiter_after_iterations=switch_iteration,
         freeze_limiter_after_residual_drop=1.5,
         vortex=vortex,
+        release_limiter=release_limiter,
     )
     q = 0.5
     loads = problem.wall_loads(result.u)

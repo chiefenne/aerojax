@@ -1,16 +1,16 @@
-# NACA 0012 on a PyAero mesh (examples/meshes/naca0012_pyaero_100k.su2,
+# NACA 0012 on a PyAero mesh (examples/meshes/naca0012_pyaero_100k_y1.su2,
 # C-type, 100k cells, farfield 5 chords ahead/above/below and 25 chords
 # downstream), inviscid flow at alpha = 10 deg with the point-vortex farfield
 # correction. PyAero's boundary names (inlet = C-arc, outlet, top, bottom)
 # all get the farfield type; identical values count as one freestream.
-# The wall spacing of this mesh (first cell 1e-4 chords) gives y+ = 0.5-2.5
-# at Re 2e5-1e6; the TMR RANS case at Re 6e6 needs about 5e-6 chords.
+# The first cell is 5e-6 chords high (y+ = 0.6 at Re 6e6, growth 1.15, about
+# 50 layers in the boundary layer): the mesh suits RANS up to Re 6e6.
 
 [case]
 name = "naca0012_pyaero_euler"
 
 [mesh]
-file = "../meshes/naca0012_pyaero_100k.su2"   # boundary faces: airfoil, inlet, outlet, top, bottom
+file = "../meshes/naca0012_pyaero_100k_y1.su2"   # boundary faces: airfoil, inlet, outlet, top, bottom
 
 [physics]
 model = "euler"
