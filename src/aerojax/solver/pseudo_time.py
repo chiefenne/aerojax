@@ -258,6 +258,9 @@ def solve_steady(
     }
     converged = done(norm, norm_abs)
     if callback is not None:
+        info = getattr(callback, "info", None)
+        if info is not None:
+            info["measure"] = norm
         callback(0, u, hist["residuals"][0], cfl, True)
     lin, nk_steps_since_factor = None, 0
     # CFL cap of the Newton-Krylov phase, adapted to the GMRES effort: the
@@ -360,6 +363,7 @@ def solve_steady(
             if info is not None:
                 info["newton_krylov"] = use_nk
                 info["linear_iterations"] = lin_its
+                info["measure"] = norm
             callback(it, u, hist["residuals"][-1], hist["cfl"][-1], accepted)
     history = {k: np.asarray(v) for k, v in hist.items()}
     return SteadyResult(u, bool(converged), history)

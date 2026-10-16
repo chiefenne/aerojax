@@ -10,6 +10,8 @@
 - Convergence measure: an equation is excluded only when its peak residual is
   below 10^-12 of the largest (was 10^-6, which dropped the SA equation from
   the check at Re > ~2e6 because its residual scales with 1/Re).
+- Log: `drop` column (orders reached by the per-equation measure, the number
+  compared with `residual_drop`) after the residuals of every iteration line.
 - Log: the Configuration section states the time mode (steady pseudo-time or
   unsteady with scheme, step and count), CFL control, stopping rule,
   Newton-Krylov switch and limiter release; the elapsed-time column is

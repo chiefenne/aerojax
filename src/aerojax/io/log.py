@@ -79,13 +79,22 @@ class RunLog:
         cols = "".join(f"{'log(R_' + n + ')':>12}" for n in self._columns)
         more = "".join(f"{name:>{width}}" for name, width in self._extra)
         self.write("")
-        self.write(f"{'iter':>6}{cols}{'CFL':>10}{more}{'wall[s]':>10}  note")
+        self.write(
+            f"{'iter':>6}{cols}{'drop':>7}{'CFL':>10}{more}{'wall[s]':>10}  note"
+        )
 
-    def iteration(self, it, residuals, cfl, accepted=True, extra=(), note=""):
-        """Write one iteration line."""
+    def iteration(
+        self, it, residuals, cfl, accepted=True, extra=(), note="", drop=None
+    ):
+        """Write one iteration line.
+
+        ``drop`` is the per-equation convergence measure in orders of
+        magnitude (the worst equation's residual relative to its own peak).
+        """
         with np.errstate(divide="ignore"):
             logs = np.log10(np.asarray(residuals, dtype=float))
         cols = "".join(f"{v:>12.4f}" for v in logs)
+        cols += f"{drop:>7.2f}" if drop is not None else f"{'':>7}"
         widths = [w for _, w in self._extra] + [7] * len(extra)
         more = "".join(f"{str(e):>{w}}" for e, w in zip(extra, widths, strict=False))
         elapsed = time.perf_counter() - self._t0

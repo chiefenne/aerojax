@@ -199,7 +199,9 @@ The log (also readable with `tail -f`) has these parts:
   boundary and for the initial state, and warns outside TMR's range
   ν̃/ν = 3–5.
 - **Iteration lines**: `log(R_p) log(R_u) log(R_v) log(R_nu)` are the RMS
-  residuals of continuity, momentum and the SA equation, `CFL` the
+  residuals of continuity, momentum and the SA equation, `drop` the
+  convergence measure in orders (the worst equation's residual relative to
+  its own peak — the run stops when it reaches `residual_drop`), `CFL` the
   pseudo-time CFL (it sets each cell's local pseudo-time step; it is not a
   physical time), `NK` marks Newton–Krylov iterations with the GMRES count
   next to it, then `CL CD CM`, and `wall[s]` is the wall-clock time since

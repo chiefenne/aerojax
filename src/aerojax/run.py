@@ -394,7 +394,8 @@ def _run_steady(log, config, problem, scaling, w0, mesh, out_dir):
         extra = ("NK" if nk else "", lin if lin else "") if implicit else ()
         coeffs = monitor.coefficients(w) if monitor else ()
         extra += tuple(f"{c:.5f}" for c in coeffs)
-        log.iteration(it, residuals, cfl, accepted, extra, info.pop("note", ""))
+        drop = max(0.0, -np.log10(max(info.get("measure", 1.0), np.finfo(float).tiny)))
+        log.iteration(it, residuals, cfl, accepted, extra, info.pop("note", ""), drop)
         history.row(it, residuals, cfl, accepted, log.elapsed, nk, lin, coeffs)
         if interval and it and it % interval == 0:
             _write_fields(out_dir / f"{name}_{it:06d}.vtu", mesh, w, scaling, problem)
@@ -531,7 +532,10 @@ def _run_unsteady(log, config, problem, scaling, w0, mesh, out_dir):
     def inner_callback(it, w, residuals, cfl, accepted):
         info = inner_callback.info
         nk, lin = info.get("newton_krylov", False), info.get("linear_iterations", 0)
-        log.iteration(it, residuals, cfl, accepted, ("NK" if nk else "", lin or ""))
+        drop = max(0.0, -np.log10(max(info.get("measure", 1.0), np.finfo(float).tiny)))
+        log.iteration(
+            it, residuals, cfl, accepted, ("NK" if nk else "", lin or ""), drop=drop
+        )
 
     inner_callback.info = {}
 
@@ -676,7 +680,7 @@ def _write_fields(path, mesh, w_nd, scaling, problem=None):
 
 
 def _mode_rows(cfg):
-    """Configuration rows for the time mode and the iteration control."""
+    """Build the configuration rows for the time mode and iteration control."""
     solver, tm, num = cfg["solver"], cfg["time"], cfg["numerics"]
     cfl, nk = solver["cfl"], solver["newton_krylov"]
     unsteady = tm["mode"] == "unsteady"
@@ -714,7 +718,8 @@ def _mode_rows(cfg):
         else:
             rows.append(("Newton-Krylov", "off"))
     if num["first_order_iterations"]:
-        rows.append(("first-order start-up", f"{num['first_order_iterations']} iterations"))
+        n_first = num["first_order_iterations"]
+        rows.append(("first-order start-up", f"{n_first} iterations"))
     freeze = num["limiter_freeze"]
     if num["limiter"] != "none" and num["spatial_order"] == 2:
         when = []
