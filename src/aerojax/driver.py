@@ -442,7 +442,7 @@ class IncompressibleProblem:
         boundary layer once the transient has passed.
         """
         w0 = self.initial_state() if w0 is None else w0
-        state = {"beta2": self.beta2(w0), "psi": None, "norm0": None}
+        state = {"beta2": self.beta2(w0), "psi": None}
         uses_limiter = self.model.limiter != "none" and self.model.spatial_order == 2
 
         def residual(w):
@@ -456,11 +456,11 @@ class IncompressibleProblem:
         def on_iteration(it, w, residuals, cfl, accepted):
             if vortex is not None and accepted:
                 self.apply_farfield_vortex(vortex, w)
-            norm = float(np.sqrt(np.mean(np.square(residuals))))
-            if state["norm0"] is None:
-                state["norm0"] = max(norm, np.finfo(float).tiny)
             if uses_limiter and state["psi"] is None and accepted:
-                drop = np.log10(state["norm0"] / max(norm, np.finfo(float).tiny))
+                # Orders of the per-equation convergence measure (D54), the
+                # same quantity that decides the Newton-Krylov switch.
+                measure = on_iteration.info.get("measure", 1.0)
+                drop = -np.log10(max(measure, np.finfo(float).tiny))
                 if (
                     freeze_limiter_after_iterations is not None
                     and it >= freeze_limiter_after_iterations

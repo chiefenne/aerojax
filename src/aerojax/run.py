@@ -351,6 +351,7 @@ def _pseudo_time_settings(cfg):
     return PseudoTimeSettings(
         cfl_start=solver["cfl"]["start"],
         cfl_max=solver["cfl"]["max"],
+        cfl_max_approximate=solver["cfl"]["max_approximate"],
         growth_factor=solver["cfl"]["growth_factor"],
         cut_factor=solver["cfl"]["cut_factor"],
         reject_factor=solver["cfl"]["reject_factor"],
@@ -704,7 +705,8 @@ def _mode_rows(cfg):
             ("mode", "steady (pseudo-time iterations; no physical time)"),
             (
                 "pseudo-time",
-                f"CFL start {cfl['start']:g}, max {cfl['max']:.0e}, growth x"
+                f"CFL start {cfl['start']:g}, max {cfl['max_approximate']:.0e} "
+                f"before Newton-Krylov and {cfl['max']:.0e} with it, growth x"
                 f"{cfl['growth_factor']:g}, cut x{cfl['cut_factor']:g}; stop after "
                 f"{solver['residual_drop']:g} orders or {solver['max_iterations']} "
                 "iterations",

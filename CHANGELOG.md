@@ -2,6 +2,13 @@
 
 ## 0.7.1 – Convergence fixes, mesh validity, PyAero mesh study (2026-10-16)
 
+- `solver.cfl.max_approximate` (default 1e3) caps the CFL while the
+  approximate first-order Jacobian is used; without the cap a restart on the
+  295k-cell mesh drove the CFL to 3e4 before Newton-Krylov was on, diverged
+  and ran the LU factorisation out of memory.
+- The limiter freeze/release uses the per-equation measure, as the
+  Newton-Krylov switch does (the total RMS released it at 0.2 orders of the
+  measure, in the middle of the transient).
 - `examples/stage6_pyaero_validation.py` runs and plots both PyAero meshes
   (`--coarse`, `--fine`, `--plot-only`).
 - Examples: `naca0012_pyaero_rans_fine.toml` with the 295k-cell PyAero mesh

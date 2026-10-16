@@ -54,6 +54,14 @@ class PseudoTimeSettings:
         Initial CFL number.
     cfl_max : float
         Upper limit of the CFL number.
+    cfl_max_approximate : float
+        Upper limit of the CFL number while the Newton-Krylov switch is
+        pending (Newton-Krylov enabled and ``jvp`` given, but the switch
+        condition not yet met). A pseudo-time step at a very large CFL is
+        a Newton step with the approximate first-order Jacobian and does
+        not converge for the second-order residual; SU2, which has only
+        this Jacobian, is run at CFL <= 1e3. Without Newton-Krylov
+        ``cfl_max`` applies throughout.
     cut_factor : float
         CFL reduction after a rejected update.
     reject_factor : float
@@ -112,6 +120,7 @@ class PseudoTimeSettings:
 
     cfl_start: float = 10.0
     cfl_max: float = 1.0e10
+    cfl_max_approximate: float = 1.0e3
     cut_factor: float = 0.1
     reject_factor: float = 10.0
     cfl_min: float = 1.0e-6
@@ -341,7 +350,11 @@ def solve_steady(
                     cfl_cap = max(cfl * 0.25, s.cfl_start)
                 elif lin_its <= s.nk_cfl_adapt_iterations // 4:
                     cfl_cap = min(cfl_cap * 4.0, s.cfl_max)
-            cfl = min(cfl_cap, cfl * ratio)
+            # Cap the CFL while the Newton-Krylov switch is pending: a huge
+            # pseudo-time step with the approximate Jacobian does not converge.
+            waiting = s.newton_krylov and jvp is not None and not use_nk
+            limit = min(cfl_cap, s.cfl_max_approximate) if waiting else cfl_cap
+            cfl = min(limit, cfl * ratio)
             if use_nk:
                 eta = min(
                     0.5, max(s.nk_linear_tolerance, 0.9 * (abs_new / norm_abs) ** 2)

@@ -251,6 +251,14 @@ SCHEMA = {
         "cfl": {
             "start": Opt("float", 10.0, "Initial CFL number", minimum=0.0),
             "max": Opt("float", 1.0e10, "Maximum CFL number", minimum=0.0),
+            "max_approximate": Opt(
+                "float",
+                1.0e3,
+                "Maximum CFL number while the Newton-Krylov switch is pending "
+                "(approximate first-order Jacobian); without Newton-Krylov, max "
+                "applies throughout",
+                minimum=0.0,
+            ),
             "growth_factor": Opt(
                 "float", 2.0, "Minimum CFL growth per accepted iteration", minimum=1.0
             ),
