@@ -84,9 +84,10 @@ class PseudoTimeSettings:
     newton_krylov : bool
         Switch to Newton-Krylov (needs ``jvp``).
     nk_switch_residual_drop : float
-        Residual drop (orders of magnitude) at which the switch happens. The
-        switch latches: Newton-Krylov stays on when the measure later rises
-        again (e.g. while the turbulence field develops).
+        Residual drop (orders of magnitude) at which the switch happens;
+        0 switches at the first iteration. The switch latches: Newton-Krylov
+        stays on when the measure later rises again (e.g. while the
+        turbulence field develops).
     nk_switch_iteration : int or None
         Switch at this iteration at the latest (the approximate-Jacobian
         iteration typically stalls two to three orders below the start).
@@ -293,7 +294,8 @@ def solve_steady(
             scale = np.maximum(scale, rms_per_variable(r))
             norm = measure(r)
         by_iteration = s.nk_switch_iteration is not None and it > s.nk_switch_iteration
-        nk_on = nk_on or norm <= nk_threshold or by_iteration
+        immediate = s.nk_switch_residual_drop <= 0.0  # dual-time inner iterations
+        nk_on = nk_on or immediate or norm <= nk_threshold or by_iteration
         use_nk = s.newton_krylov and jvp is not None and not startup and nk_on
         t_matrix = time_term(u, cfl)
         accepted, lin_its = False, 0
