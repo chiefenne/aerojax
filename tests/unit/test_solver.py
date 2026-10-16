@@ -111,6 +111,7 @@ def test_newton_krylov_waits_for_the_measured_drop():
     assert result.converged and not h["newton_krylov"][1]
     first_nk = int(np.argmax(h["newton_krylov"]))
     assert first_nk > 0 and h["measure"][first_nk - 1] <= 1e-2
+    assert h["newton_krylov"][first_nk:].all()  # the switch latches
 
 
 def test_ser_raises_cfl_while_residual_falls():

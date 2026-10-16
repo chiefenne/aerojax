@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- The Newton-Krylov switch latches: once on it stays on when the measure
+  rises again while the turbulence field develops (a 150k-cell run spent 19
+  iterations back in PTC before this).
 - Mesh reader rejects self-intersecting or folded cells (neighbouring cell
   centroid on the wrong side of a face) and prints their positions. Such a
   PyAero mesh gave a non-zero residual of the uniform state and a drifting

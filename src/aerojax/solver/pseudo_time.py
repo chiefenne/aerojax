@@ -76,7 +76,9 @@ class PseudoTimeSettings:
     newton_krylov : bool
         Switch to Newton-Krylov (needs ``jvp``).
     nk_switch_residual_drop : float
-        Residual drop (orders of magnitude) at which the switch happens.
+        Residual drop (orders of magnitude) at which the switch happens. The
+        switch latches: Newton-Krylov stays on when the measure later rises
+        again (e.g. while the turbulence field develops).
     nk_switch_iteration : int or None
         Switch at this iteration at the latest (the approximate-Jacobian
         iteration typically stalls two to three orders below the start).
@@ -263,6 +265,7 @@ def solve_steady(
             info["measure"] = norm
         callback(0, u, hist["residuals"][0], cfl, True)
     lin, nk_steps_since_factor = None, 0
+    nk_on = False  # the switch latches: once on, Newton-Krylov stays on
     # CFL cap of the Newton-Krylov phase, adapted to the GMRES effort: the
     # first-order preconditioner degrades as the pseudo-time term vanishes,
     # so expensive linear solves lower the cap and cheap ones raise it.
@@ -281,12 +284,8 @@ def solve_steady(
             scale = np.maximum(scale, rms_per_variable(r))
             norm = measure(r)
         by_iteration = s.nk_switch_iteration is not None and it > s.nk_switch_iteration
-        use_nk = (
-            s.newton_krylov
-            and jvp is not None
-            and not startup
-            and (norm <= nk_threshold or by_iteration)
-        )
+        nk_on = nk_on or norm <= nk_threshold or by_iteration
+        use_nk = s.newton_krylov and jvp is not None and not startup and nk_on
         t_matrix = time_term(u, cfl)
         accepted, lin_its = False, 0
         try:
