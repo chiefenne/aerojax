@@ -19,6 +19,7 @@ directly).
 - [Requirements](docs/requirements.md): decisions, planned features, stage plan
 - [Case configuration](docs/configuration.md): TOML case-file reference
 - [From a PyAero mesh to a result](docs/pyaero.md): mesh settings (y⁺, farfield), case file, log, limits
+- [Verification and validation](docs/validation.md): every case with its reference, numbers and figure
 
 ## Installation
 

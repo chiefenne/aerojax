@@ -2,13 +2,16 @@
 
 Run from the repository root (about two minutes):
 
-    python examples/stage4_unsteady.py
+    python examples/stage4_unsteady.py [--medium]
 
 Output in ``examples/output/``: ``stage4_unsteady.png``, the final field
 ``stage4_dfg_2d2.vtu`` and the series ``stage4_dfg_2d2.pvd`` (one period of
-shedding, open the .pvd in ParaView).
+shedding, open the .pvd in ParaView). ``--medium`` runs the DFG case on the
+4.4k-cell mesh with dt = 0.01 (the verification-test resolution, about ten
+minutes).
 """
 
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -57,18 +60,21 @@ def main():
             f"orders {orders[0]:.2f} {orders[1]:.2f}"
         )
 
-    print("B2 DFG benchmark 2D-2 (Re = 100), 1.5k cells, dt = 0.02, t = 8")
+    medium = "--medium" in sys.argv
+    n_s, n_r, dt = (32, 20, 0.01) if medium else (16, 12, 0.02)
+    cells = "4.4k cells, dt = 0.01" if medium else "1.5k cells, dt = 0.02"
+    print(f"B2 DFG benchmark 2D-2 (Re = 100), {cells}, t = 8")
     series = []
-    dt, t_end = 0.02, 8.0
+    t_end = 8.0
     n_steps = int(round(t_end / dt))
 
     def snapshot(step, t, w, problem):
-        if step > n_steps - 18:  # about one shedding period
+        if step > n_steps - int(round(0.34 / dt)):  # about one shedding period
             file = f"stage4_dfg_2d2_{step:06d}.vtu"
             write_vtu(OUT / file, problem.mesh, cell_data=fields(w))
             series.append((t, file))
 
-    r = cylinder.dfg_2d2(16, 12, time_step=dt, end_time=t_end, callback=snapshot)
+    r = cylinder.dfg_2d2(n_s, n_r, time_step=dt, end_time=t_end, callback=snapshot)
     ref2 = r.reference
     print(
         f"  St = {r.strouhal:.4f} (ref {ref2['strouhal']}), cD max = {r.cd_max:.4f} "

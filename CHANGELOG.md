@@ -2,6 +2,9 @@
 
 ## 0.7.1 – Convergence fixes, mesh validity, PyAero mesh study (2026-10-16)
 
+- `docs/validation.md`: all verification and validation cases with their
+  references, numbers and figures (`docs/figures/`); `stage4_unsteady.py
+  --medium` runs the DFG 2D-2 case at the verification-test resolution.
 - `solver.cfl.max_approximate` (default 1e3) caps the CFL while the
   approximate first-order Jacobian is used; without the cap a restart on the
   295k-cell mesh drove the CFL to 3e4 before Newton-Krylov was on, diverged
