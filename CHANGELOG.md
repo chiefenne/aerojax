@@ -2,6 +2,8 @@
 
 ## 0.7.1 – Convergence fixes, mesh validity, PyAero mesh study (2026-10-16)
 
+- `examples/stage6_pyaero_validation.py` runs and plots both PyAero meshes
+  (`--coarse`, `--fine`, `--plot-only`).
 - Examples: `naca0012_pyaero_rans_fine.toml` with the 295k-cell PyAero mesh
   `naca0012_pyaero_300k_y1_s450.su2` (472 points per airfoil side), and
   `naca0012_pyaero_rans_far.toml` with the 149k-cell PyAero mesh

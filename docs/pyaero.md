@@ -323,8 +323,10 @@ and glider Reynolds numbers until L3.
 
 ## 8. Validation on the stage-6 mesh (fully turbulent, Re 6·10⁶)
 
-`python examples/stage6_pyaero_validation.py` runs the polar and plots it
-against Ladson's tripped data (NASA TM 4074) and the TMR SA values, with
+`python examples/stage6_pyaero_validation.py` runs the polars on the 113-
+and 472-points-per-side meshes (`--coarse` / `--fine` for one of them,
+`--plot-only` to plot existing results) and plots them against Ladson's
+tripped data (NASA TM 4074) and the TMR SA values, with
 the C_p at 10° against Gregory & O'Reilly (NASA R&M 3726, Re 2.88·10⁶):
 
 | α | CL | Ladson (80/120 grit) | CD | Ladson | CD pressure / viscous |
