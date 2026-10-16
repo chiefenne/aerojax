@@ -4,7 +4,7 @@
 # 5 chords, outlet 25 chords) with the point-vortex farfield correction.
 # Same numerics as naca0012_pyaero_rans.toml (D54); the two cases differ only
 # in the surface resolution (113 vs 472 points per side).
-# Result (laptop, 22 min, 27 s per iteration): CL = 1.0827, CD = 0.01258
+# Result (laptop, 20-27 s per iteration): CL = 1.0827, CD = 0.01258
 # (pressure 0.00625, viscous 0.00632); TMR (CFL3D, 897x257): CL 1.0909,
 # CD 0.012311 (pressure 0.00606, viscous 0.00620). With 113 points per side
 # the pressure drag is 0.00687. Table in docs/pyaero.md, section 8.

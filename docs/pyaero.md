@@ -364,28 +364,45 @@ surface points and first layer are the same.
 
 **Chordwise resolution is the cause.** `naca0012_pyaero_rans_fine.toml`
 uses a 5-chord mesh with 472 points per airfoil side instead of 113 (same
-first layer, 295k cells), α = 10°:
+first layer, 295k cells). At α = 10°:
 
 | mesh | points/side | CL | CD | CD pressure | CD viscous | iterations, s/iteration |
 |---|---|---|---|---|---|---|
 | 100k, 5c | 113 | 1.0807 | 0.01317 | 0.00687 | 0.00630 | 44, 9 |
 | 150k, 25c | 113 | 1.0764 | 0.01487 | 0.00852 | 0.00635 | 34, 9 |
-| 295k, 5c | 472 | 1.0827 | 0.01258 | 0.00625 | 0.00632 | 49, 27 |
+| 295k, 5c | 472 | 1.0827 | 0.01258 | 0.00625 | 0.00632 | 71, 20–27 |
 | TMR CFL3D, 897×257 | 449 | 1.0909 | 0.01231 | 0.00606 | 0.00620 | |
 
 The pressure drag goes from +13 % to +3 % against TMR, the total drag from
 +7 % to +2 %; the remaining 0.8 % on the lift is TMR's M = 0.15
 (Prandtl–Glauert ≈ 1 %). The viscous drag is unchanged by any of this.
+The full polar on the fine mesh (restart chain, 41–74 iterations per angle,
+about 25 minutes each on a laptop):
+
+| α | CL fine | CL coarse | Ladson (80/120) | CD fine | CD coarse | Ladson | CD pressure / viscous, fine |
+|---|---|---|---|---|---|---|---|
+| 0° | 0.0000 | 0.0000 | −0.007 / −0.012 | 0.00825 | 0.00828 | 0.00809 / 0.00807 | 0.00133 / 0.00692 |
+| 4° | 0.4448 | 0.4447 | 0.427 / 0.428 | 0.00883 | 0.00893 | 0.00823 / 0.00876 | 0.00198 / 0.00684 |
+| 8° | 0.8771 | 0.8763 | 0.856 / 0.862 | 0.01081 | 0.01116 | 0.01028 / 0.00989 | 0.00424 / 0.00656 |
+| 10° | 1.0827 | 1.0807 | 1.059 / 1.067 | 0.01258 | 0.01317 | 0.01191 / 0.01166 | 0.00625 / 0.00632 |
+| 12° | 1.2758 | 1.2710 | 1.249 / 1.259 | 0.01516 | 0.01612 | 0.01321 / 0.01277 | 0.00916 / 0.00600 |
+
+Against Ladson the fine mesh is within 2 % on CD at 0°, 5–8 % at 8–10°
+and 15–19 % at 12°; the lift is 1–2 % high throughout, as TMR's SA is.
+The growing drag gap towards 12° is shared with the SA model itself (TMR's
+own grid-converged CD is above Ladson there) and with the fully turbulent
+assumption against a tripped experiment, so it is not a mesh item any more.
 
 ## 9. Reference points from stage 6
 
-PyAero C-mesh, 100k cells, y₁ = 5·10⁻⁶ m, farfield 5 chords, outlet 25
-chords, Re 6·10⁶, SA-neg, vortex correction:
+PyAero C-meshes, y₁ = 5·10⁻⁶ m, farfield 5 chords, outlet 25 chords,
+Re 6·10⁶, SA-neg, vortex correction; 113 points per side (100k cells) and
+472 points per side (295k cells):
 
-| α | CL | CD | CD pressure | CD viscous | TMR (CFL3D) CL / CD |
+| α | CL 113 / 472 | CD 113 / 472 | CD pressure 113 / 472 | CD viscous 113 / 472 | TMR (CFL3D) CL / CD |
 |---|---|---|---|---|---|
-| 0° | 0.0000 | 0.00828 | 0.00133 | 0.00694 | 0 / 0.00819 |
-| 10° | 1.0807 | 0.01317 | 0.00687 | 0.00630 | 1.0909 / 0.01231 |
+| 0° | 0.0000 / 0.0000 | 0.00828 / 0.00825 | 0.00133 / 0.00133 | 0.00694 / 0.00692 | 0 / 0.00819 |
+| 10° | 1.0807 / 1.0827 | 0.01317 / 0.01258 | 0.00687 / 0.00625 | 0.00630 / 0.00632 | 1.0909 / 0.01231 |
 
 TMR's values are compressible at M = 0.15, which raises the lift by about
 1 % (Prandtl–Glauert); the pressure-drag excess at 10° is the chordwise
