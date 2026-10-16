@@ -2,6 +2,9 @@
 
 ## Unreleased (0.7.2)
 
+- Optional direct solvers: `solver.linear_solver.type = "pardiso"` (Intel MKL
+  PARDISO via `pypardiso`, multithreaded) and `"umfpack"` (`scikit-umfpack`);
+  SuperLU (`"direct"`) stays the default and the only built-in one.
 - Speed: the factorized first-order system is reused for up to three
   iterations (`solver.refactor_interval`, moved from `newton_krylov`), rebuilt
   earlier after a rejection, a fourfold CFL growth or a hard GMRES solve;

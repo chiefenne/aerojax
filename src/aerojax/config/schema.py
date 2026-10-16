@@ -312,8 +312,10 @@ SCHEMA = {
             "type": Opt(
                 "string",
                 "direct",
-                "Sparse solver of the start-up phase, preconditioner of Newton-Krylov",
-                choices=("direct", "gmres-ilu"),
+                "Sparse solver of the start-up phase, preconditioner of Newton-Krylov: "
+                "SuperLU (direct), Intel MKL PARDISO (pardiso, needs pypardiso), "
+                "UMFPACK (umfpack, needs scikit-umfpack), GMRES with incomplete LU",
+                choices=("direct", "pardiso", "umfpack", "gmres-ilu"),
             ),
             "tolerance": Opt(
                 "float", 1.0e-6, "Relative GMRES tolerance (gmres-ilu)", minimum=0.0

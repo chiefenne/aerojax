@@ -1,11 +1,16 @@
 """Linear solvers for the implicit iterations (D32).
 
-Two solvers for the sparse system ``A x = b`` with ``A = T + J1``:
+Solvers for the sparse system ``A x = b`` with ``A = T + J1``:
 
-- ``"direct"``: sparse LU (SciPy SuperLU). Robust, no parameters; memory and
-  time grow faster than the mesh size.
+- ``"direct"``: sparse LU (SciPy SuperLU). Robust, no parameters, always
+  available; single-threaded, memory and time grow faster than the mesh size.
+- ``"pardiso"``: Intel MKL PARDISO through the optional ``pypardiso``
+  package (multithreaded; x86 only).
+- ``"umfpack"``: UMFPACK through the optional ``scikit-umfpack`` package
+  (multifrontal, BLAS-threaded).
 - ``"gmres-ilu"``: restarted GMRES preconditioned by an incomplete LU
-  (SciPy ``spilu``), for large meshes.
+  (SciPy ``spilu``). Measured no cheaper than the exact LU at any useful
+  accuracy on a 100k-cell airfoil mesh; kept for experiments.
 
 Both also serve as the preconditioner of the matrix-free Newton-Krylov
 solve (:func:`solve_matrix_free`), where the operator is ``T + J`` with the
@@ -17,7 +22,7 @@ from dataclasses import dataclass
 import numpy as np
 import scipy.sparse.linalg as spla
 
-SOLVERS = ("direct", "gmres-ilu")
+SOLVERS = ("direct", "pardiso", "umfpack", "gmres-ilu")
 
 
 class LinearSolverError(RuntimeError):
@@ -30,7 +35,7 @@ class LinearSettings:
 
     Attributes
     ----------
-    type : {"direct", "gmres-ilu"}
+    type : {"direct", "pardiso", "umfpack", "gmres-ilu"}
     tolerance : float
         Relative residual tolerance of GMRES (``"gmres-ilu"`` only).
     restart : int
@@ -99,6 +104,71 @@ class DirectLU:
         return self._lu.solve(rhs)
 
 
+class PardisoLU:
+    """Sparse LU by Intel MKL PARDISO (optional dependency ``pypardiso``)."""
+
+    def __init__(self, matrix, settings=None):
+        try:
+            import pypardiso
+        except ImportError as exc:
+            raise LinearSolverError(
+                "linear_solver.type = 'pardiso' needs the pypardiso package "
+                "(pip install pypardiso, or conda install -c conda-forge pypardiso)"
+            ) from exc
+        self._matrix = matrix.tocsr()
+        self._matrix.sort_indices()
+        self._solver = pypardiso.PyPardisoSolver()
+        try:
+            self._solver.factorize(self._matrix)
+        except Exception as exc:  # pypardiso.PyPardisoError on a singular matrix
+            self._solver.free_memory(everything=True)
+            raise LinearSolverError(str(exc)) from exc
+        self.iterations = 0
+
+    def solve(self, rhs):
+        """Solve ``A x = rhs``."""
+        return _finite(self.precondition(rhs))
+
+    def precondition(self, rhs):
+        """Apply the factorization."""
+        return self._solver.solve(self._matrix, rhs).reshape(rhs.shape)
+
+    def __del__(self):
+        """Release PARDISO's internal memory."""
+        solver = getattr(self, "_solver", None)
+        if solver is not None:
+            try:
+                solver.free_memory(everything=True)
+            except Exception:  # noqa: BLE001 - interpreter shutdown
+                pass
+
+
+class UmfpackLU:
+    """Sparse LU by UMFPACK (optional dependency ``scikit-umfpack``)."""
+
+    def __init__(self, matrix, settings=None):
+        try:
+            import scikits.umfpack as umfpack
+        except ImportError as exc:
+            raise LinearSolverError(
+                "linear_solver.type = 'umfpack' needs the scikit-umfpack package "
+                "(conda install -c conda-forge scikit-umfpack)"
+            ) from exc
+        try:
+            self._lu = umfpack.splu(matrix.tocsc())
+        except Exception as exc:  # singular matrix
+            raise LinearSolverError(str(exc)) from exc
+        self.iterations = 0
+
+    def solve(self, rhs):
+        """Solve ``A x = rhs``."""
+        return _finite(self._lu.solve(rhs))
+
+    def precondition(self, rhs):
+        """Apply the factorization."""
+        return self._lu.solve(rhs)
+
+
 class GmresILU:
     """GMRES with an incomplete-LU preconditioner."""
 
@@ -135,10 +205,14 @@ class GmresILU:
 
 
 def factorize(matrix, settings=None):
-    """Return a solver object (:class:`DirectLU` or :class:`GmresILU`)."""
+    """Return a solver object for ``settings.type``."""
     s = settings or LinearSettings()
     if s.type == "direct":
         return DirectLU(matrix, settings)
+    if s.type == "pardiso":
+        return PardisoLU(matrix, s)
+    if s.type == "umfpack":
+        return UmfpackLU(matrix, s)
     if s.type == "gmres-ilu":
         return GmresILU(matrix, s)
     raise ValueError(f"linear solver type must be one of {SOLVERS}")
