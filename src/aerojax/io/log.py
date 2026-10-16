@@ -79,7 +79,7 @@ class RunLog:
         cols = "".join(f"{'log(R_' + n + ')':>12}" for n in self._columns)
         more = "".join(f"{name:>{width}}" for name, width in self._extra)
         self.write("")
-        self.write(f"{'iter':>6}{cols}{'CFL':>10}{more}{'time[s]':>10}  note")
+        self.write(f"{'iter':>6}{cols}{'CFL':>10}{more}{'wall[s]':>10}  note")
 
     def iteration(self, it, residuals, cfl, accepted=True, extra=(), note=""):
         """Write one iteration line."""
@@ -106,7 +106,7 @@ class RunLog:
         self.write("")
         self.write(
             f"{'step':>6}{'time':>12}{'inner':>6}{'drop':>6}{cols}{more}"
-            f"{'time[s]':>10}  note"
+            f"{'wall[s]':>10}  note"
         )
 
     def step(self, step, t, inner, drop, residuals, extra=(), note=""):

@@ -675,6 +675,59 @@ def _write_fields(path, mesh, w_nd, scaling, problem=None):
     write_vtu(path, mesh, cell_data=data)
 
 
+def _mode_rows(cfg):
+    """Configuration rows for the time mode and the iteration control."""
+    solver, tm, num = cfg["solver"], cfg["time"], cfg["numerics"]
+    cfl, nk = solver["cfl"], solver["newton_krylov"]
+    unsteady = tm["mode"] == "unsteady"
+    if unsteady:
+        n_steps = int(round(tm["end_time"] / tm["time_step"]))
+        rows = [
+            (
+                "mode",
+                f"unsteady, {tm['scheme'].upper()}, time step {tm['time_step']} s, "
+                f"end time {tm['end_time']} s ({n_steps} steps)",
+            ),
+            (
+                "inner iterations",
+                f"per step up to {tm['inner_iterations']}, stop after "
+                f"{tm['inner_residual_drop']} orders, CFL {tm['inner_cfl']:.0e}, "
+                "Newton-Krylov from the first inner iteration",
+            ),
+        ]
+    else:
+        rows = [
+            ("mode", "steady (pseudo-time iterations; no physical time)"),
+            (
+                "pseudo-time",
+                f"CFL start {cfl['start']:g}, max {cfl['max']:.0e}, growth x"
+                f"{cfl['growth_factor']:g}, cut x{cfl['cut_factor']:g}; stop after "
+                f"{solver['residual_drop']:g} orders or {solver['max_iterations']} "
+                "iterations",
+            ),
+        ]
+        if nk["enabled"] and solver["method"] == "implicit":
+            when = f"after {nk['switch_at_residual_drop']:g} orders"
+            if nk["switch_at_iteration"] is not None:
+                when += f" or from iteration {nk['switch_at_iteration']}"
+            rows.append(("Newton-Krylov", when))
+        else:
+            rows.append(("Newton-Krylov", "off"))
+    if num["first_order_iterations"]:
+        rows.append(("first-order start-up", f"{num['first_order_iterations']} iterations"))
+    freeze = num["limiter_freeze"]
+    if num["limiter"] != "none" and num["spatial_order"] == 2:
+        when = []
+        if freeze["after_residual_drop"] is not None:
+            when.append(f"after {freeze['after_residual_drop']:g} orders")
+        if freeze["after_iterations"] is not None:
+            when.append(f"at iteration {freeze['after_iterations']}")
+        if when:
+            action = "released" if freeze["release"] else "frozen"
+            rows.append(("limiter", f"{action} {' or '.join(when)}"))
+    return rows
+
+
 def _log_setup(log, config, problem, scaling, mesh):
     cfg = config.data
     log.section("Configuration")
@@ -701,8 +754,9 @@ def _log_setup(log, config, problem, scaling, mesh):
         ),
         ("viscous gradient", cfg["numerics"]["viscous_gradient"]),
         ("solver", cfg["solver"]["method"]),
-        ("resolved configuration", f"{config.name}.resolved.toml"),
     ]
+    rows += _mode_rows(cfg)
+    rows.append(("resolved configuration", f"{config.name}.resolved.toml"))
     log.table(rows)
     log.section("Mesh")
     for line in mesh.summary().splitlines():

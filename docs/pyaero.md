@@ -192,12 +192,18 @@ aerojax run case.toml        # writes <name>.log, .history.csv, .vtu, .wall_<bou
 The log (also readable with `tail -f`) has these parts:
 
 - **Configuration, Mesh, Boundary conditions, Turbulence**: the resolved
-  setup; the Turbulence section lists ν_t/ν and ν̃/ν per inflow boundary and
-  for the initial state, and warns outside TMR's range ν̃/ν = 3–5.
-- **Iteration lines**: `log(R_p) log(R_u) log(R_v) log(R_n)` are the RMS
+  setup, including the time mode (`steady` = pseudo-time iterations without
+  physical time, or `unsteady` with scheme, time step and step count), the
+  CFL control and stopping rule, when Newton–Krylov takes over and when the
+  limiter is released; the Turbulence section lists ν_t/ν and ν̃/ν per inflow
+  boundary and for the initial state, and warns outside TMR's range
+  ν̃/ν = 3–5.
+- **Iteration lines**: `log(R_p) log(R_u) log(R_v) log(R_nu)` are the RMS
   residuals of continuity, momentum and the SA equation, `CFL` the
-  pseudo-time CFL, `NK` marks Newton–Krylov iterations with the GMRES count
-  next to it, then `CL CD CM`. The note column shows `limiter released`
+  pseudo-time CFL (it sets each cell's local pseudo-time step; it is not a
+  physical time), `NK` marks Newton–Krylov iterations with the GMRES count
+  next to it, then `CL CD CM`, and `wall[s]` is the wall-clock time since
+  the start of the run. The note column shows `limiter released`
   (or `frozen`) and `rejected` updates. Expected pattern on a 100k-cell
   mesh: 40 start-up iterations that bring the flow residuals down about
   three orders while the turbulence field develops, then 4–10 Newton steps
