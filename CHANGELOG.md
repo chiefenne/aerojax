@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.1 – Convergence fixes, mesh validity, PyAero mesh study (2026-10-16)
 
 - Examples: `naca0012_pyaero_rans_fine.toml` with the 295k-cell PyAero mesh
   `naca0012_pyaero_300k_y1_s450.su2` (472 points per airfoil side), and
@@ -19,7 +19,7 @@
   pseudo-time iteration.
 - Fixed: Newton-Krylov switched on at iteration 1 whenever the absolute
   residual was already below 10^-switch_at_residual_drop (the start-up branch
-  overwrote the per-equation measure). On the 40c PyAero mesh this failed the
+  overwrote the per-equation measure). On the 25-chord PyAero mesh this failed the
   first GMRES solve and left the solution stuck at CFL ~ 1.
 - Summary line `residual drop` reports orders of the per-equation measure.
 - Convergence measure: an equation is excluded only when its peak residual is
