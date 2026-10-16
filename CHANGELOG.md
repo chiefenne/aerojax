@@ -2,6 +2,16 @@
 
 ## Unreleased (0.7.2)
 
+- Fixed: after the limiter was released (or frozen) the acceptance test still
+  compared against the residual of the limited operator; a restart from a
+  converged solution converged the limited problem three orders further than
+  the unlimited one and every Newton step after the release was rejected. The
+  reference residual is now re-evaluated when the operator changes.
+- `aerojax polar` restarts from the lower angle when two computed angles are
+  equally near.
+- Measured on the 295k-cell mesh (alpha 4, 65 iterations): SuperLU 1059 s,
+  UMFPACK ~13.5 s per factorization instead of 20 s, PARDISO 570 s with a
+  factorization of 5.8 s and faster triangular solves — identical results.
 - Optional direct solvers: `solver.linear_solver.type = "pardiso"` (Intel MKL
   PARDISO via `pypardiso`, multithreaded) and `"umfpack"` (`scikit-umfpack`);
   SuperLU (`"direct"`) stays the default and the only built-in one.

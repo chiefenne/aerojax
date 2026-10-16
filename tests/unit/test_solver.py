@@ -121,3 +121,27 @@ def test_ser_raises_cfl_while_residual_falls():
     assert result.converged and np.all(h["accepted"])
     assert np.all(np.diff(h["residual"]) < 0.0)
     assert np.all(np.diff(h["cfl"][1:]) > 0.0)
+
+
+def test_reference_residual_follows_an_operator_change():
+    """A callback that changes the residual operator (limiter release) must
+    not leave the acceptance test comparing against the old operator's
+    residual: here the root moves from u = 1 to u = 1.21 at iteration 2,
+    when the first problem is three orders down."""
+    state = {"target": 1.0}
+    residual = lambda u: np.sqrt(u) - state["target"]  # noqa: E731
+    jacobian = lambda u: sp.diags(0.5 / np.sqrt(u.ravel()))  # noqa: E731
+    time_term = lambda u, cfl: sp.diags(np.ones(u.size) / cfl)  # noqa: E731
+
+    def callback(it, u, residuals, cfl, accepted):
+        if it == 2:
+            state["target"] = 1.1
+            callback.info["residual_changed"] = True
+
+    callback.info = {}
+    settings = PseudoTimeSettings(residual_drop=10.0, max_iterations=40)
+    result = solve_steady(
+        residual, jacobian, time_term, np.full((3, 1), 1.5), settings, callback=callback
+    )
+    assert result.converged and result.history["accepted"][3:].all()
+    np.testing.assert_allclose(result.u, 1.21, rtol=1e-9)

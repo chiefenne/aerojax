@@ -478,6 +478,9 @@ class IncompressibleProblem:
                         if release_limiter
                         else self.limiter(w)
                     )
+                    # The residual operator changed: solve_steady re-evaluates
+                    # its reference residual before judging the next step.
+                    on_iteration.info["residual_changed"] = True
                     if callback is not None and hasattr(callback, "info"):
                         callback.info["note"] = (
                             "limiter released" if release_limiter else "limiter frozen"

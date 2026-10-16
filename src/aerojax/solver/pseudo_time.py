@@ -293,6 +293,16 @@ def solve_steady(
     for it in range(1, s.max_iterations + 1):
         if converged or cfl < s.cfl_min:
             break
+        info = getattr(callback, "info", None)
+        if info is not None and info.pop("residual_changed", False):
+            # The callback changed the residual operator (limiter frozen or
+            # released): the reference for acceptance and convergence is the
+            # residual of the current state under the new operator, not the
+            # one the previous step produced.
+            r = res(u, it)
+            norm_abs = rms(r)
+            scale = np.maximum(scale, rms_per_variable(r))
+            norm = measure(r)
         startup = residual_startup is not None and it <= s.first_order_iterations
         if (
             s.first_order_iterations

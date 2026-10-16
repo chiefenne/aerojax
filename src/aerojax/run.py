@@ -880,7 +880,11 @@ def _read_polar(path):
 
 
 def _nearest_restart(out_dir, name, alpha):
-    """Restart file of the previously computed angle nearest to ``alpha``."""
+    """Restart file of the previously computed angle nearest to ``alpha``.
+
+    On a tie the lower angle wins (continuation upwards, as the restart
+    chain of a polar is built); the angle itself is never a candidate.
+    """
     best = None
     for d in out_dir.glob("alpha_*"):
         try:
@@ -888,6 +892,9 @@ def _nearest_restart(out_dir, name, alpha):
         except ValueError:
             continue
         file = d / f"{name}_alpha_{a:g}.restart.npz"
-        if file.exists() and (best is None or abs(a - alpha) < abs(best[0] - alpha)):
-            best = (a, file)
+        if not file.exists() or a == alpha:
+            continue
+        rank = (abs(a - alpha), a > alpha)
+        if best is None or rank < best[0]:
+            best = (rank, file)
     return None if best is None else best[1]
