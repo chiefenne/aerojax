@@ -337,6 +337,14 @@ drag within 2 % of TMR; the pressure drag grows above the data with α
 (+12 % total at 10°, +24 % at 12°) — the 5-chord farfield and y⁺ = 2.5 at
 the suction peak, both mesh items.
 
+To separate the two, `examples/cases/naca0012_pyaero_rans_far.toml` runs the
+same setup on `examples/meshes/naca0012_pyaero_150k_y1.su2`: the same
+airfoil discretisation and first-cell height, but a tunnel 25 chords above
+and below the airfoil (inlet arc 19 chords upstream, outlet 30 chords
+behind the trailing edge), 149k cells. At 0° it gives CD = 0.00838
+(pressure 0.00139, viscous 0.00700) in 39 iterations; the polar at 4–12°
+follows.
+
 ## 9. Reference points from stage 6
 
 PyAero C-mesh, 100k cells, y₁ = 5·10⁻⁶ m, farfield 5 chords, outlet 25

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Example: `naca0012_pyaero_rans_far.toml` with the 149k-cell PyAero mesh
+  `naca0012_pyaero_150k_y1.su2` (25-chord tunnel) for the farfield-distance
+  study.
 - The Newton-Krylov switch latches: once on it stays on when the measure
   rises again while the turbulence field develops (a 150k-cell run spent 19
   iterations back in PTC before this).

@@ -1,0 +1,76 @@
+# NACA 0012 at Re = 6e6, alpha = 10 deg, SA-neg, on the large-tunnel PyAero
+# mesh examples/meshes/naca0012_pyaero_150k_y1.su2 (C-type, 149k cells, first
+# cell 5e-6 chords, tunnel 25 chords above and below the airfoil, inlet arc
+# 19 chords upstream, outlet 30 chords behind the trailing edge) with the
+# point-vortex farfield correction. Same numerics as naca0012_pyaero_rans.toml
+# (D54); the two cases differ only in the farfield distance (5 vs 25 chords)
+# and serve to separate the farfield influence from the rest. Polar:
+#   aerojax polar examples/cases/naca0012_pyaero_rans_far.toml --alpha 0 4 8 10 12
+# Results: docs/pyaero.md, section 8.
+
+[case]
+name = "naca0012_pyaero_rans_far"
+
+[mesh]
+file = "../meshes/naca0012_pyaero_150k_y1.su2"   # boundary faces: airfoil, inlet, outlet, top, bottom
+
+[physics]
+model = "rans"
+turbulence = "sa-neg"
+
+[fluid]
+density = 1.0                     # kg/m^3
+viscosity = 1.6666667e-7          # Pa s: Re = 6e6 with U = 1 m/s, c = 1 m
+
+[reference]
+velocity = 1.0                    # m/s
+length = 1.0                      # m, chord
+moment_center = [0.25, 0.0]       # m, quarter chord: also the vortex location
+vortex_correction = true
+
+[initial]
+from_boundary = "inlet"
+
+[boundary.airfoil]
+type = "wall"
+
+[boundary.inlet]
+type = "farfield"
+velocity = 1.0                    # m/s
+angle_of_attack = 10.0            # deg
+pressure = 0.0                    # Pa
+turbulence = { nu_tilde_ratio = 3.0 }
+
+[boundary.outlet]
+type = "farfield"
+velocity = 1.0
+angle_of_attack = 10.0
+pressure = 0.0
+turbulence = { nu_tilde_ratio = 3.0 }
+
+[boundary.top]
+type = "farfield"
+velocity = 1.0
+angle_of_attack = 10.0
+pressure = 0.0
+turbulence = { nu_tilde_ratio = 3.0 }
+
+[boundary.bottom]
+type = "farfield"
+velocity = 1.0
+angle_of_attack = 10.0
+pressure = 0.0
+turbulence = { nu_tilde_ratio = 3.0 }
+
+[numerics]
+limiter = "venkatakrishnan"       # local threshold for the start-up transient
+limiter_freeze = { after_residual_drop = 1.5, after_iterations = 40, release = true }
+
+[solver]
+residual_drop = 7.0
+max_iterations = 400
+newton_krylov = { switch_at_residual_drop = 1.5, switch_at_iteration = 40 }
+
+[output]
+directory = "output/naca0012_pyaero_rans_far"
+force_boundaries = ["airfoil"]
