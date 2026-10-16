@@ -16,6 +16,7 @@ from aerojax.physics import forces as fz
 from aerojax.physics import incompressible as inc
 from aerojax.physics import rans
 from aerojax.solver import (
+    JacobianPattern,
     PseudoTimeSettings,
     block_diagonal,
     first_order_jacobian,
@@ -169,6 +170,7 @@ class IncompressibleProblem:
             self.pinned_cell = cell
         self.model = model
         self.physics = rans if self.turbulent else inc
+        self._pattern = None  # Jacobian sparsity, built at the first assembly
         self._fi = partial(self.physics.interior_flux, model)
         self._fb = partial(self.physics.boundary_flux, model)
 
@@ -280,6 +282,8 @@ class IncompressibleProblem:
         if self.turbulent:
             b_args = b_args + (self.bc.nu_tilde,)
             mask = rans.SEGREGATED_MASK if self.model.coupling == "segregated" else None
+        if self._pattern is None:
+            self._pattern = JacobianPattern(self.geom, self.model.n_var)
         j = first_order_jacobian(
             self.geom,
             self._fi,
@@ -288,6 +292,7 @@ class IncompressibleProblem:
             params=beta2,
             b_args=b_args,
             block_mask=mask,
+            pattern=self._pattern,
         )
         if self.turbulent:
             j = j + block_diagonal(

@@ -110,11 +110,19 @@ class PseudoTimeSettings:
         is capped (quartered) for the following steps, and a quarter of
         which lets the cap grow again; keeps the first-order preconditioner
         effective on stretched meshes (D52, P14).
-    nk_refactor_interval : int
-        In the Newton-Krylov phase, rebuild the preconditioner (first-order
-        Jacobian plus pseudo-time term, factorized) only every n-th step and
-        reuse it otherwise; the factorization dominates the cost on large
-        meshes. 1 = every step.
+    refactor_interval : int
+        Rebuild the factorized first-order system (Jacobian plus pseudo-time
+        term) only every n-th iteration and reuse it otherwise, in both
+        phases: as a lagged matrix for the pseudo-time step and as the
+        preconditioner of Newton-Krylov. It is rebuilt earlier after a
+        rejected update, when the CFL has grown by more than
+        ``refactor_cfl_ratio`` since the factorization, and after a
+        Newton-Krylov step that needed more than ``nk_cfl_adapt_iterations
+        // 4`` GMRES iterations (a stale preconditioner costs more there than
+        it saves). The factorization dominates the cost on large meshes.
+        1 = every iteration.
+    refactor_cfl_ratio : float
+        CFL growth since the last factorization that forces a new one.
     linear : LinearSettings
         Sparse linear solver of phase 1 and preconditioner of phase 2.
     """
@@ -136,7 +144,8 @@ class PseudoTimeSettings:
     nk_linear_tolerance: float = 1.0e-2
     nk_restart: int = 50
     nk_max_krylov: int = 200
-    nk_refactor_interval: int = 1
+    refactor_interval: int = 3
+    refactor_cfl_ratio: float = 4.0
     nk_cfl_adapt_iterations: int = 60
     nk_forcing: bool = True
     line_search_steps: int = 2
@@ -274,7 +283,8 @@ def solve_steady(
         if info is not None:
             info["measure"] = norm
         callback(0, u, hist["residuals"][0], cfl, True)
-    lin, nk_steps_since_factor = None, 0
+    lin, steps_since_factor, cfl_at_factor = None, 0, cfl
+    stale = False  # the preconditioner let GMRES work hard: rebuild it
     nk_on = False  # the switch latches: once on, Newton-Krylov stays on
     # CFL cap of the Newton-Krylov phase, adapted to the GMRES effort: the
     # first-order preconditioner degrades as the pseudo-time term vanishes,
@@ -301,15 +311,16 @@ def solve_steady(
         accepted, lin_its = False, 0
         try:
             reuse = (
-                use_nk
-                and lin is not None
-                and nk_steps_since_factor < s.nk_refactor_interval
+                lin is not None
+                and steps_since_factor < s.refactor_interval
+                and cfl <= cfl_at_factor * s.refactor_cfl_ratio
+                and not stale
             )
             if not reuse:
                 lin = factorize(jacobian(u) + t_matrix, s.linear)
-                nk_steps_since_factor = 0
+                steps_since_factor, cfl_at_factor = 0, cfl
+            steps_since_factor += 1
             if use_nk:
-                nk_steps_since_factor += 1
                 du, lin_its = solve_matrix_free(
                     _newton_operator(t_matrix, jvp, u),
                     -r.ravel(),
@@ -352,6 +363,7 @@ def solve_steady(
                     cfl_cap = max(cfl * 0.25, s.cfl_start)
                 elif lin_its <= s.nk_cfl_adapt_iterations // 4:
                     cfl_cap = min(cfl_cap * 4.0, s.cfl_max)
+                stale = lin_its > s.nk_cfl_adapt_iterations // 4
             # Cap the CFL while the Newton-Krylov switch is pending: a huge
             # pseudo-time step with the approximate Jacobian does not converge.
             waiting = s.newton_krylov and jvp is not None and not use_nk

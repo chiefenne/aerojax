@@ -6,7 +6,12 @@ from aerojax.solver.dual_time import (
     bdf_coefficients,
     solve_unsteady,
 )
-from aerojax.solver.jacobian import block_diagonal, first_order_jacobian, replace_rows
+from aerojax.solver.jacobian import (
+    JacobianPattern,
+    block_diagonal,
+    first_order_jacobian,
+    replace_rows,
+)
 from aerojax.solver.linear import (
     LinearSettings,
     LinearSolverError,
@@ -35,6 +40,7 @@ __all__ = [
     "block_diagonal",
     "divergence",
     "factorize",
+    "JacobianPattern",
     "first_order_jacobian",
     "replace_rows",
     "rms",

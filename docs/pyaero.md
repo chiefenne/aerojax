@@ -421,6 +421,12 @@ farfield distance.
   pressure drag is 13 % high at 10°. That means ~300k cells with y⁺ = 1
   and about 30 s per iteration on a laptop; the linear solver is the
   bottleneck (P13).
-- Run time grows with the sparse LU factorization: ~7–10 s per iteration at
-  100k cells on two cores; above ~150k cells `linear_solver.type =
-  "gmres-ilu"` is the cheaper choice (P13 for a stronger preconditioner).
+- Run time is the sparse LU factorization of the first-order system:
+  5.5 s per factorization at 100k cells on two cores (70 % of a pseudo-time
+  iteration), 20 s and several GB at 295k cells. The factorization is
+  reused for up to three iterations (`solver.refactor_interval`), which
+  makes the start-up phase about three times cheaper; the Newton phase is
+  dominated by the GMRES residual evaluations. SciPy's incomplete LU
+  (`linear_solver.type = "gmres-ilu"`) is no shortcut: at a useful accuracy
+  it costs as much as the exact factorization. A faster direct solver
+  (UMFPACK) or multigrid (P13) is the way beyond 300k cells.

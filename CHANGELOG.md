@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased (0.7.2)
+
+- Speed: the factorized first-order system is reused for up to three
+  iterations (`solver.refactor_interval`, moved from `newton_krylov`), rebuilt
+  earlier after a rejection, a fourfold CFL growth or a hard GMRES solve;
+  pseudo-time iterations without a factorization cost ~1 s instead of 7 s at
+  100k cells. The Jacobian sparsity pattern is built once per mesh and the
+  assembly is a single `bincount` (was ~1 s per iteration).
+- Profile at 100k cells: SuperLU factorization 70 % of an iteration, Jacobian
+  assembly 19 %, residual 6 %. SciPy's incomplete LU is not cheaper at any
+  useful accuracy; the docs no longer recommend `gmres-ilu` for large meshes.
+- The slow stretch of the Newton phase on airfoil start-ups is the SA
+  transient (the nu_tilde residual rises 2.5 orders while the eddy viscosity
+  establishes itself; CD halves meanwhile), not the GMRES tolerance.
+
 ## 0.7.1 – Convergence fixes, mesh validity, PyAero mesh study (2026-10-16)
 
 - `docs/validation.md`: all verification and validation cases with their

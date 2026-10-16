@@ -31,8 +31,52 @@ def _face_blocks(geom, interior_flux, boundary_flux, u, params, b_args):
     return d_o * fl, d_n * fl, d_b * geom.b_length[:, None, None]
 
 
+class JacobianPattern:
+    """Fixed sparsity of the first-order Jacobian of one geometry.
+
+    The face blocks always land on the same matrix entries, so the CSR
+    structure and the map from face-block entries to CSR positions are built
+    once (``np.unique`` on the row/column keys) and every assembly is one
+    ``np.bincount``; rebuilding a COO matrix per iteration cost about as much
+    as a residual evaluation on a 100k-cell mesh.
+    """
+
+    def __init__(self, geom, n_var):
+        o, n, b = (np.asarray(a) for a in (geom.f_owner, geom.f_neigh, geom.b_owner))
+        n_cells = int(np.asarray(geom.area).shape[0])
+        block_rows = np.concatenate((o, o, n, n, b))
+        block_cols = np.concatenate((o, n, o, n, b))
+        k = np.arange(n_var)
+        rows = (block_rows[:, None, None] * n_var + k[None, :, None]).repeat(n_var, 2)
+        cols = (block_cols[:, None, None] * n_var + k[None, None, :]).repeat(n_var, 1)
+        size = n_cells * n_var
+        key = rows.ravel().astype(np.int64) * size + cols.ravel()
+        unique, inverse = np.unique(key, return_inverse=True)
+        self.n_var = n_var
+        self.shape = (size, size)
+        self.position = inverse.astype(np.int32)  # face-block entry -> CSR entry
+        self.indices = (unique % size).astype(np.int32)
+        self.indptr = np.searchsorted(unique // size, np.arange(size + 1)).astype(
+            np.int32
+        )
+
+    def assemble(self, blocks):
+        """CSR matrix from the face blocks ordered (d_o, d_n, -d_o, -d_n, d_b)."""
+        data = np.bincount(
+            self.position, weights=blocks.ravel(), minlength=self.indices.size
+        )
+        return sp.csr_matrix((data, self.indices, self.indptr), shape=self.shape)
+
+
 def first_order_jacobian(
-    geom, interior_flux, boundary_flux, u, params=None, b_args=(), block_mask=None
+    geom,
+    interior_flux,
+    boundary_flux,
+    u,
+    params=None,
+    b_args=(),
+    block_mask=None,
+    pattern=None,
 ):
     """Assemble dR1/du of the compact first-order residual.
 
@@ -59,30 +103,24 @@ def first_order_jacobian(
     block_mask : array (n_var, n_var), optional
         Multiplies every flux block, e.g. to drop cross-coupling entries
         (segregated turbulence coupling, D34).
+    pattern : JacobianPattern, optional
+        Sparsity built once for this geometry; built on the fly otherwise.
 
     Returns
     -------
     scipy.sparse.csr_matrix, shape (n_cells * n_var, n_cells * n_var)
     """
-    n_cells, n_var = u.shape
+    n_var = u.shape[1]
     d_o, d_n, d_b = (
         np.asarray(a)
         for a in _face_blocks(geom, interior_flux, boundary_flux, u, params, b_args)
     )
-    o, n, b = (np.asarray(a) for a in (geom.f_owner, geom.f_neigh, geom.b_owner))
-    block_rows = np.concatenate((o, o, n, n, b))
-    block_cols = np.concatenate((o, n, o, n, b))
     blocks = np.concatenate((d_o, d_n, -d_o, -d_n, d_b))
     if block_mask is not None:
         blocks = blocks * np.asarray(block_mask, dtype=float)[None]
-
-    k = np.arange(n_var)
-    rows = (block_rows[:, None, None] * n_var + k[None, :, None]).repeat(n_var, 2)
-    cols = (block_cols[:, None, None] * n_var + k[None, None, :]).repeat(n_var, 1)
-    size = n_cells * n_var
-    return sp.coo_matrix(
-        (blocks.ravel(), (rows.ravel(), cols.ravel())), shape=(size, size)
-    ).tocsr()
+    if pattern is None:
+        pattern = JacobianPattern(geom, n_var)
+    return pattern.assemble(blocks)
 
 
 def block_diagonal(blocks):

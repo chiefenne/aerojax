@@ -242,6 +242,15 @@ SCHEMA = {
         "max_iterations": Opt(
             "int", 10000, "Maximum pseudo-time iterations", minimum=1
         ),
+        "refactor_interval": Opt(
+            "int",
+            3,
+            "Rebuild the factorized first-order system only every n-th iteration "
+            "(lagged pseudo-time matrix, Newton-Krylov preconditioner); earlier "
+            "after a rejected update, when the CFL has grown fourfold, or after a "
+            "Newton step with more than 15 GMRES iterations",
+            minimum=1,
+        ),
         "residual_drop": Opt(
             "float",
             8.0,
@@ -297,12 +306,6 @@ SCHEMA = {
             "restart": Opt("int", 50, "GMRES restart length", minimum=1),
             "max_iterations": Opt(
                 "int", 200, "Maximum GMRES iterations per Newton step", minimum=1
-            ),
-            "refactor_interval": Opt(
-                "int",
-                1,
-                "Rebuild the preconditioner every n-th Newton step (1 = every step)",
-                minimum=1,
             ),
         },
         "linear_solver": {
