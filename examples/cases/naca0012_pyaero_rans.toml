@@ -69,6 +69,10 @@ limiter_freeze = { after_residual_drop = 1.5, after_iterations = 40, release = t
 residual_drop = 7.0
 max_iterations = 400
 newton_krylov = { switch_at_residual_drop = 1.5, switch_at_iteration = 40 }
+# Intel MKL PARDISO: 3.5x faster factorization than the default SuperLU
+# ("direct"), needs the pypardiso package (conda install -c conda-forge
+# pypardiso); remove the line or set type = "direct" without it.
+linear_solver = { type = "pardiso" }
 
 [output]
 directory = "output/naca0012_pyaero_rans"

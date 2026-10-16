@@ -155,6 +155,7 @@ limiter_freeze = { after_residual_drop = 1.5, after_iterations = 40, release = t
 residual_drop = 7.0
 max_iterations = 400
 newton_krylov = { switch_at_residual_drop = 1.5, switch_at_iteration = 40 }
+linear_solver = { type = "pardiso" }   # optional; default "direct" = SuperLU
 
 [output]
 directory = "output/naca0012_pyaero_rans"
@@ -174,6 +175,12 @@ Notes on the choices:
   Newton–Krylov phase takes over. Do not freeze the limiter instead of
   releasing it on this kind of mesh: the frozen limiter gave C_f 70 % too
   high on the stage-6 mesh.
+- `linear_solver = { type = "pardiso" }` uses Intel MKL PARDISO through the
+  `pypardiso` package (`conda install -c conda-forge pypardiso`; x86 only):
+  factorization 5.8 s instead of 20 s on the 295k-cell mesh, the whole run
+  1.9× faster, identical results. Without the package remove the line —
+  the default `"direct"` (SuperLU) needs nothing — or use `"umfpack"`
+  (`scikit-umfpack`, 1.5× over SuperLU, also on Apple silicon).
 - `nu_tilde_ratio = 3` is NASA TMR's farfield value; the equivalent ν_t/ν,
   k and Tu are printed in the log's Turbulence section (D33 has the other
   input forms).
