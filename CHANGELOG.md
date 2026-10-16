@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- RANS log and history header: four residual columns (`log(R_nu)` added), so
+  the CFL, NK, GMRES and coefficient columns line up again.
+
 ## 0.7 – Restarts, polars, validation on the PyAero mesh (2026-10-15)
 
 - Restart files (`<name>.restart.npz`, `initial.restart`) and `aerojax polar`

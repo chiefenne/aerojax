@@ -372,7 +372,7 @@ def _run_steady(log, config, problem, scaling, w0, mesh, out_dir):
     """Steady solve with one log line per pseudo-time iteration."""
     cfg = config.data
     name = config.name
-    names = ("p", "u", "v")
+    names = ("p", "u", "v", "nu") if problem.turbulent else ("p", "u", "v")
     implicit = cfg["solver"]["method"] == "implicit"
     force_boundaries = cfg["output"]["force_boundaries"]
     monitor = Monitor(config, problem, scaling) if force_boundaries else None
@@ -480,7 +480,7 @@ def _run_unsteady(log, config, problem, scaling, w0, mesh, out_dir):
     name = config.name
     tm = cfg["time"]
     t_scale = scaling.length / scaling.velocity  # physical seconds per unit time
-    names = ("p", "u", "v")
+    names = ("p", "u", "v", "nu") if problem.turbulent else ("p", "u", "v")
     force_boundaries = cfg["output"]["force_boundaries"]
     monitor = Monitor(config, problem, scaling) if force_boundaries else None
     coeff_names = ("CL", "CD", "CM") if monitor else ()
