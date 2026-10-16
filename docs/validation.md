@@ -5,7 +5,8 @@ What the solver has been checked against, in the order of the stage plan
 solution and test the discretisation; *validation* cases compare with
 benchmark computations or experiments. Every figure is produced by one
 example script from the repository root; the numbers are from the runs
-behind the figures (Apple-silicon laptop, October 2026, v0.7.1).
+behind the figures (iMac 2019, 3.6 GHz 8-core Intel Core i9, 32 GB,
+October 2026, v0.7.1).
 
 | stage | case | type | reference | script |
 |---|---|---|---|---|

@@ -68,7 +68,7 @@ points per side give CD_pressure 13 % above TMR, 472 points per side 3 %
 (section 8). For drag use 400–500 points per side with clustering at the
 leading and trailing edges — TMR's fine grids have 449 — and accept the
 cell count that comes with it (295k cells with y⁺ = 1, 27 s per iteration
-on a laptop). PyAero's blunt trailing edge is fine (the solver's own O-grid
+on an 8-core desktop). PyAero's blunt trailing edge is fine (the solver's own O-grid
 uses a 0.14 % base for the same reason: a sharp trailing edge produces a
 fan of nearly flat cells).
 
@@ -377,7 +377,7 @@ The pressure drag goes from +13 % to +3 % against TMR, the total drag from
 +7 % to +2 %; the remaining 0.8 % on the lift is TMR's M = 0.15
 (Prandtl–Glauert ≈ 1 %). The viscous drag is unchanged by any of this.
 The full polar on the fine mesh (restart chain, 41–74 iterations per angle,
-about 25 minutes each on a laptop):
+about 25 minutes each on an 8-core Intel iMac):
 
 | α | CL fine | CL coarse | Ladson (80/120) | CD fine | CD coarse | Ladson | CD pressure / viscous, fine |
 |---|---|---|---|---|---|---|---|
@@ -419,7 +419,7 @@ farfield distance.
   been exercised.
 - Drag needs 400–500 points per airfoil side (section 8): with 113 the
   pressure drag is 13 % high at 10°. That means ~300k cells with y⁺ = 1
-  and about 30 s per iteration on a laptop; the linear solver is the
+  and about 30 s per iteration on an 8-core desktop; the linear solver is the
   bottleneck (P13).
 - Run time is the sparse LU factorization of the first-order system:
   5.5 s per factorization at 100k cells on two cores (70 % of a pseudo-time
