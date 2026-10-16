@@ -39,8 +39,9 @@ aerojax run case.toml          # solve; writes <name>.log, .history.csv, .vtu
 ```
 
 Example case files are in `examples/cases/` (generate their meshes first with
-`python examples/cases/make_meshes.py`; `examples/meshes/` holds two PyAero
-meshes of the NACA 0012, with 5- and 25-chord tunnels). The case-file reference is
+`python examples/cases/make_meshes.py`; `examples/meshes/` holds three PyAero
+meshes of the NACA 0012: 5- and 25-chord tunnels with 113 points per
+airfoil side, and a 5-chord tunnel with 472). The case-file reference is
 [docs/configuration.md](docs/configuration.md); the same setup is available
 from Python through `aerojax.driver.IncompressibleProblem`.
 

@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-- Example: `naca0012_pyaero_rans_far.toml` with the 149k-cell PyAero mesh
+- Examples: `naca0012_pyaero_rans_fine.toml` with the 295k-cell PyAero mesh
+  `naca0012_pyaero_300k_y1_s450.su2` (472 points per airfoil side), and
+  `naca0012_pyaero_rans_far.toml` with the 149k-cell PyAero mesh
   `naca0012_pyaero_150k_y1.su2` (25-chord tunnel) for the farfield-distance
   study: the pressure-drag excess at high angles is not a farfield effect
   but the chordwise resolution — 472 points per airfoil side bring the
