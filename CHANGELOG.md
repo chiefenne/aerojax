@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (0.7.2)
+## 0.7.2 – Speed: lagged factorization, PARDISO/UMFPACK, Jacobian pattern (2026-10-17)
 
 - Fixed: after the limiter was released (or frozen) the acceptance test still
   compared against the residual of the limited operator; a restart from a
