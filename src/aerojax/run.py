@@ -438,7 +438,11 @@ def _run_steady(log, config, problem, scaling, w0, mesh, out_dir):
         ("converged", "yes" if result.converged else "NO"),
         ("iterations", f"{int(h['iteration'][-1])} ({nk_steps} Newton-Krylov)"),
         ("rejected updates", str(int(np.count_nonzero(~h["accepted"])))),
-        ("residual drop", f"{h['residual'][-1] / h['residual'][0]:.2e}"),
+        (
+            "residual drop",
+            f"{-np.log10(max(h['measure'][-1], np.finfo(float).tiny)):.1f} orders"
+            f" (RMS {h['residual'][-1] / h['residual'][0]:.1e} x initial)",
+        ),
         ("setup and compilation", f"{timing['setup']:.1f} s"),
         ("wall time", f"{log.elapsed:.1f} s"),
         ("fields", str(out_dir / f"{name}.vtu")),

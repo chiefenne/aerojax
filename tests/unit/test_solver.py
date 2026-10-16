@@ -98,6 +98,21 @@ def test_line_search_accepts_a_shortened_step():
     np.testing.assert_allclose(result.u, 1.0, rtol=1e-12)
 
 
+def test_newton_krylov_waits_for_the_measured_drop():
+    """A small absolute residual must not trigger the NK switch (per-equation
+    measure, D54): u0 = 1.0001 gives |R| ~ 5e-5 from the start."""
+    residual, jacobian, time_term, u0 = scalar_problem(1.0001)
+    jvp = lambda u, du: 0.5 / np.sqrt(u) * du  # noqa: E731
+    settings = PseudoTimeSettings(nk_switch_residual_drop=2.0, residual_drop=10.0)
+    result = solve_steady(
+        residual, jacobian, time_term, u0, settings, residual_startup=residual, jvp=jvp
+    )
+    h = result.history
+    assert result.converged and not h["newton_krylov"][1]
+    first_nk = int(np.argmax(h["newton_krylov"]))
+    assert first_nk > 0 and h["measure"][first_nk - 1] <= 1e-2
+
+
 def test_ser_raises_cfl_while_residual_falls():
     residual, jacobian, time_term, u0 = scalar_problem(1.5)
     result = solve_steady(residual, jacobian, time_term, u0, PseudoTimeSettings())

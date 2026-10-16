@@ -267,9 +267,15 @@ def solve_steady(
         if converged or cfl < s.cfl_min:
             break
         startup = residual_startup is not None and it <= s.first_order_iterations
-        if it == s.first_order_iterations + 1 and residual_startup is not None:
+        if (
+            s.first_order_iterations
+            and it == s.first_order_iterations + 1
+            and residual_startup is not None
+        ):
             r = res(u, it)  # switch to the full residual
-            norm = rms(r)
+            norm_abs = rms(r)
+            scale = np.maximum(scale, rms_per_variable(r))
+            norm = measure(r)
         by_iteration = s.nk_switch_iteration is not None and it > s.nk_switch_iteration
         use_nk = (
             s.newton_krylov
