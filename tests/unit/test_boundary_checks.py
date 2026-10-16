@@ -58,3 +58,20 @@ def test_non_manifold_edge():
     cells = [[0, 1, 4, 3], [1, 2, 5, 4], [1, 4, 6]]
     with pytest.raises(MeshError, match="more than two cells"):
         Mesh.from_cells(nodes, cells, {})
+
+
+def test_folded_cell_is_rejected():
+    """A bow-tie quad (nodes listed 1-4-0-3, edges 4-0 and 3-1 cross) next to
+    a valid one; they share the face 1-4."""
+    nodes = np.array([[0, 0], [1, 0], [2, 0], [0, 1], [1.2, 1.5], [2, 1]], dtype=float)
+    cells = [[1, 4, 0, 3], [1, 2, 5, 4]]
+    boundary = {
+        "bottom": [[1, 2]],
+        "right": [[2, 5]],
+        "top": [[5, 4]],
+        "left": [[0, 3]],
+        "diagonals": [[4, 0], [3, 1]],
+    }
+    with pytest.raises(MeshError, match="self-intersecting or folded") as err:
+        Mesh.from_cells(nodes, cells, boundary)
+    assert "(0, 0.5)" in str(err.value)  # the inverted edge 0-3 of the bow-tie

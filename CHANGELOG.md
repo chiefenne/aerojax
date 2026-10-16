@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Mesh reader rejects self-intersecting or folded cells (neighbouring cell
+  centroid on the wrong side of a face) and prints their positions. Such a
+  PyAero mesh gave a non-zero residual of the uniform state and a drifting
+  pseudo-time iteration.
 - Fixed: Newton-Krylov switched on at iteration 1 whenever the absolute
   residual was already below 10^-switch_at_residual_drop (the start-up branch
   overwrote the per-equation measure). On the 40c PyAero mesh this failed the

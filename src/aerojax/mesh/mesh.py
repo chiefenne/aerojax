@@ -196,6 +196,7 @@ class Mesh:
             boundary_edges, face_key, neighbour, n_nodes
         )
         _check_boundary_partition(boundary_faces, neighbour, face_centre)
+        _check_orientation(owner, neighbour, face_normal, face_centre, cell_centroid)
 
         return cls(
             nodes=nodes,
@@ -290,6 +291,27 @@ def _check_boundary_partition(boundary_faces, neighbour, face_centre, n_show=5):
         )
     if problems:
         raise MeshError("invalid boundary-face sets:\n  " + "\n  ".join(problems))
+
+
+def _check_orientation(owner, neighbour, face_normal, face_centre, centroid, n_show=5):
+    """Check that every face normal points from its owner to its neighbour.
+
+    The cell-centred discretisation needs ``(c_neighbour - c_owner) . n > 0``
+    (the alpha-damping viscous flux divides by it). A self-intersecting
+    (bow-tie) or folded cell violates it; the uniform state then has a
+    residual and the pseudo-time iteration drifts instead of converging.
+    """
+    inner = neighbour >= 0
+    far = np.where(inner[:, None], centroid[np.maximum(neighbour, 0)], face_centre)
+    delta = far - centroid[owner]
+    bad = np.flatnonzero(np.einsum("ij,ij->i", delta, face_normal) <= 0.0)
+    if bad.size:
+        cells = np.unique(np.concatenate((owner[bad], neighbour[bad][inner[bad]])))
+        raise MeshError(
+            f"{bad.size} faces have their neighbouring cell centroid on the wrong "
+            f"side ({cells.size} self-intersecting or folded cells), e.g. at "
+            f"{_fmt_points(face_centre[bad[:n_show]])}; fix the mesh in the generator"
+        )
 
 
 def _fmt_points(points):

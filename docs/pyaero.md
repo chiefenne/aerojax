@@ -14,6 +14,15 @@ runs of stage 6 (`docs/requirements.md`, D40 and D54).
   `outlet`, `top`, `bottom`. Nothing is renamed; the case file assigns a
   condition to each name. Every boundary face must belong to exactly one
   named set (the reader checks this).
+- Valid cells. The reader rejects self-intersecting ("bow-tie") or folded
+  cells, i.e. faces whose neighbouring cell centroid lies on the wrong side,
+  and prints their positions. PyAero can produce such cells where the
+  C-block around the airfoil meets a tall tunnel extension (seen on a 150k
+  mesh with a 50-chord tunnel: a band of slivers above and below the airfoil
+  at mid-chord, out to |y| ≈ 6 c). Such a mesh does not converge: the
+  uniform initial field already has a residual there and the pseudo-time
+  iteration drifts (CD climbing while the CFL falls). Check the mesh in
+  PyAero around the block boundaries and regenerate.
 - The chord length in metres goes into `reference.length`; the Reynolds
   number is set either through `fluid.reynolds_number` (with `reference.
   velocity` and `reference.length`) or through `fluid.viscosity`.
