@@ -86,15 +86,15 @@ inner drop.
 **DFG 2D-2** (Re = 100, periodic shedding, Schäfer & Turek 1996; reference
 St 0.295–0.305, c_D,max 3.22–3.24, c_L,max 0.99–1.01, Δp 2.46–2.50):
 
-| mesh, Δt | St | c_D,max | c_L,max |
-|---|---|---|---|
-| 1.5k cells, 0.02 (figure) | 0.244 | 3.13 | 0.82 |
-| 4.4k cells, 0.01 (`--medium`) | 0.278 (−7 %) | 3.20 (−1 %) | 1.06 (+5 %) |
+| mesh, Δt | St | c_D,max | c_L,max | Δp |
+|---|---|---|---|---|
+| 1.5k cells, 0.02 (default) | 0.244 | 3.13 | 0.82 | 2.31 |
+| 4.4k cells, 0.01 (`--medium`, figure) | 0.278 (−7 %) | 3.199 (−1 %) | 1.059 (+5 %) | 2.439 (−1.5 %) |
 
 The coarse mesh resolves the wake poorly and the shedding frequency and
 amplitude come out low; the medium mesh is within the spread the DFG
 participants reported. Both are deliberately small cases (two and ten
-minutes).
+minutes); three inner Newton–Krylov iterations per step in both.
 
 ![unsteady](figures/stage4_unsteady.png)
 
