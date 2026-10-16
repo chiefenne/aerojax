@@ -207,8 +207,9 @@ def solve_steady(
     ``reference_norm``), and the residual measure is the maximum of these
     ratios, so that an equation whose residual is small in absolute terms
     (the turbulence equation) still has to converge. Variables whose peak
-    residual stays below 10^-6 of the largest peak (round-off residuals of a
-    symmetric or one-dimensional problem) are left out. Step acceptance,
+    residual stays below 10^-12 of the largest peak (round-off residuals of
+    a symmetric or one-dimensional problem) are left out; the SA residual
+    is about 1/Re times the momentum residual, so it stays in. Step acceptance,
     the line search, the CFL control and the forcing term use the plain RMS
     norm of the whole residual, as before.
 
@@ -232,7 +233,7 @@ def solve_steady(
     )
 
     def measure(r):
-        active = scale >= 1e-6 * scale.max()
+        active = scale >= 1e-12 * scale.max()
         return float(np.max(np.where(active, rms_per_variable(r) / scale, 0.0)))
 
     norm_abs = rms(r)

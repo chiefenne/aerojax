@@ -215,8 +215,10 @@ The log (also readable with `tail -f`) has these parts:
   the output paths.
 
 Convergence is judged per equation (each residual relative to its own
-peak, the worst equation must drop `residual_drop` orders); with
-`residual_drop = 7` the coefficients are converged to all printed digits.
+peak, the worst equation must drop `residual_drop` orders, the SA equation
+included — its residual is about 1/Re times the momentum residuals, which
+is why the columns differ by six orders); with `residual_drop = 7` the
+coefficients are converged to all printed digits.
 
 ## 5. Output
 

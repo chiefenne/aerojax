@@ -7,6 +7,9 @@
   overwrote the per-equation measure). On the 40c PyAero mesh this failed the
   first GMRES solve and left the solution stuck at CFL ~ 1.
 - Summary line `residual drop` reports orders of the per-equation measure.
+- Convergence measure: an equation is excluded only when its peak residual is
+  below 10^-12 of the largest (was 10^-6, which dropped the SA equation from
+  the check at Re > ~2e6 because its residual scales with 1/Re).
 - Log: the Configuration section states the time mode (steady pseudo-time or
   unsteady with scheme, step and count), CFL control, stopping rule,
   Newton-Krylov switch and limiter release; the elapsed-time column is
