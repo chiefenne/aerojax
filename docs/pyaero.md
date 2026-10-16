@@ -75,7 +75,8 @@ C-arc at 3.5 chords −6.4 % against a 500-chord domain, −2.9 % with the
 point-vortex correction; a 10-chord O-grid with the correction is within
 0.1 %. Recommendation: C-arc and top/bottom at 20–50 chords, outlet at
 25–50 chords, and `reference.vortex_correction = true`. At 5 chords (the
-stage-6 mesh) the correction still leaves about 1 % on the lift.
+stage-6 mesh) the correction leaves under 0.5 % on the lift against the
+25-chord mesh of section 8, and it does not affect the drag.
 
 **Wake block.** The refined wake block follows the chord; at angle of
 attack the wake leaves it after one or two chords, which is acceptable
@@ -334,16 +335,30 @@ the C_p at 10° against Gregory & O'Reilly (NASA R&M 3726, Re 2.88·10⁶):
 Lift within 1–4 % of the experiment (TMR's SA itself is +2.6 % at 10°),
 C_p at 10° within 0.02 of Gregory & O'Reilly for x/c > 0.05, the viscous
 drag within 2 % of TMR; the pressure drag grows above the data with α
-(+12 % total at 10°, +24 % at 12°) — the 5-chord farfield and y⁺ = 2.5 at
-the suction peak, both mesh items.
+(+12 % total at 10°, +24 % at 12°).
 
-To separate the two, `examples/cases/naca0012_pyaero_rans_far.toml` runs the
-same setup on `examples/meshes/naca0012_pyaero_150k_y1.su2`: the same
-airfoil discretisation and first-cell height, but a tunnel 25 chords above
-and below the airfoil (inlet arc 19 chords upstream, outlet 30 chords
-behind the trailing edge), 149k cells. At 0° it gives CD = 0.00838
-(pressure 0.00139, viscous 0.00700) in 39 iterations; the polar at 4–12°
-follows.
+**Farfield distance is not the cause.** `naca0012_pyaero_rans_far.toml`
+runs the same setup on `examples/meshes/naca0012_pyaero_150k_y1.su2`: the
+same airfoil points and first-cell height, but a tunnel 25 chords above and
+below the airfoil (inlet arc 19 chords upstream, outlet 30 chords behind
+the trailing edge), 149k cells:
+
+| α | CL (5c) | CL (25c) | CD (5c) | CD (25c) | CD pressure (5c) | (25c) | iterations (25c) |
+|---|---|---|---|---|---|---|---|
+| 0° | 0.0000 | 0.0000 | 0.00828 | 0.00838 | 0.00133 | 0.00139 | 39 |
+| 4° | 0.4447 | 0.4449 | 0.00893 | 0.00932 | 0.00206 | 0.00241 | 31 |
+| 8° | 0.8763 | 0.8741 | 0.01116 | 0.01233 | 0.00460 | 0.00572 | 34 |
+| 10° | 1.0807 | 1.0764 | 0.01317 | 0.01487 | 0.00687 | 0.00852 | 34 |
+| 12° | 1.2710 | 1.2646 | 0.01612 | 0.01839 | 0.01016 | 0.01238 | 35 |
+
+The lift changes by less than 0.5 % (the vortex correction covers the
+5-chord tunnel), the viscous drag by 1 %, but the pressure drag is 24 %
+*higher* on the large tunnel at 10°. The excess therefore comes from the
+near-field discretisation, which differs between the two C-meshes although
+surface points and first layer are the same. Both have 226 faces around
+the airfoil (113 per side; TMR's grids with CD pressure 0.00606 have 449)
+and y⁺ = 2.5 at the suction peak; chordwise resolution is the next item
+to test (same first layer, twice the airfoil points, α = 10°).
 
 ## 9. Reference points from stage 6
 
@@ -356,8 +371,8 @@ chords, Re 6·10⁶, SA-neg, vortex correction:
 | 10° | 1.0807 | 0.01317 | 0.00687 | 0.00630 | 1.0909 / 0.01231 |
 
 TMR's values are compressible at M = 0.15, which raises the lift by about
-1 % (Prandtl–Glauert); the remaining pressure-drag excess at 10° goes with
-the 5-chord farfield and y⁺ = 2.5 at the suction peak.
+1 % (Prandtl–Glauert); the remaining pressure-drag excess at 10° is a
+near-field resolution item (section 8), not the farfield distance.
 
 ## 10. Current limits
 
@@ -367,6 +382,10 @@ the 5-chord farfield and y⁺ = 2.5 at the suction peak.
   bubbles.
 - Steady cases are verified; unsteady RANS (shedding at high Re) has not
   been exercised.
+- Pressure drag at high lift is 12–24 % above the data on the PyAero
+  meshes used so far (113 points per airfoil side, y⁺ 2.5 at the suction
+  peak); the farfield distance has been ruled out (section 8), the
+  chordwise resolution has not been tested yet.
 - Run time grows with the sparse LU factorization: ~7–10 s per iteration at
   100k cells on two cores; above ~150k cells `linear_solver.type =
   "gmres-ilu"` is the cheaper choice (P13 for a stronger preconditioner).
