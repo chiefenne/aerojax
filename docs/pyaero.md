@@ -62,12 +62,15 @@ at Re 6·10⁶: from y₁ = 5·10⁻⁶ c with growth 1.15, 50 layers reach 0.03
 ~2000); the scheme handles stretching, not skewness. Keep the layers
 orthogonal to the surface, which PyAero does.
 
-**Surface points.** 200–300 nodes around the airfoil with clustering at the
-leading and trailing edges correspond to TMR's medium grids, where the lift
-is within ~0.2 % of the grid-converged value; the pressure drag converges
-more slowly with the surface and wake resolution. PyAero's blunt trailing
-edge is fine (the solver's own O-grid uses a 0.14 % base for the same
-reason: a sharp trailing edge produces a fan of nearly flat cells).
+**Surface points.** The lift is insensitive (113 points per side give it
+within 1 % of TMR), the pressure drag is not: at Re 6·10⁶ and 10°, 113
+points per side give CD_pressure 13 % above TMR, 472 points per side 3 %
+(section 8). For drag use 400–500 points per side with clustering at the
+leading and trailing edges — TMR's fine grids have 449 — and accept the
+cell count that comes with it (295k cells with y⁺ = 1, 27 s per iteration
+on a laptop). PyAero's blunt trailing edge is fine (the solver's own O-grid
+uses a 0.14 % base for the same reason: a sharp trailing edge produces a
+fan of nearly flat cells).
 
 **Farfield distance.** The farfield condition is a freestream state; its
 distance biases the lift. Measured with the inviscid NACA 0012 at 10°:
@@ -355,10 +358,22 @@ The lift changes by less than 0.5 % (the vortex correction covers the
 5-chord tunnel), the viscous drag by 1 %, but the pressure drag is 24 %
 *higher* on the large tunnel at 10°. The excess therefore comes from the
 near-field discretisation, which differs between the two C-meshes although
-surface points and first layer are the same. Both have 226 faces around
-the airfoil (113 per side; TMR's grids with CD pressure 0.00606 have 449)
-and y⁺ = 2.5 at the suction peak; chordwise resolution is the next item
-to test (same first layer, twice the airfoil points, α = 10°).
+surface points and first layer are the same.
+
+**Chordwise resolution is the cause.** `naca0012_pyaero_rans_fine.toml`
+uses a 5-chord mesh with 472 points per airfoil side instead of 113 (same
+first layer, 295k cells), α = 10°:
+
+| mesh | points/side | CL | CD | CD pressure | CD viscous | iterations, s/iteration |
+|---|---|---|---|---|---|---|
+| 100k, 5c | 113 | 1.0807 | 0.01317 | 0.00687 | 0.00630 | 44, 9 |
+| 150k, 25c | 113 | 1.0764 | 0.01487 | 0.00852 | 0.00635 | 34, 9 |
+| 295k, 5c | 472 | 1.0827 | 0.01258 | 0.00625 | 0.00632 | 49, 27 |
+| TMR CFL3D, 897×257 | 449 | 1.0909 | 0.01231 | 0.00606 | 0.00620 | |
+
+The pressure drag goes from +13 % to +3 % against TMR, the total drag from
++7 % to +2 %; the remaining 0.8 % on the lift is TMR's M = 0.15
+(Prandtl–Glauert ≈ 1 %). The viscous drag is unchanged by any of this.
 
 ## 9. Reference points from stage 6
 
@@ -371,8 +386,9 @@ chords, Re 6·10⁶, SA-neg, vortex correction:
 | 10° | 1.0807 | 0.01317 | 0.00687 | 0.00630 | 1.0909 / 0.01231 |
 
 TMR's values are compressible at M = 0.15, which raises the lift by about
-1 % (Prandtl–Glauert); the remaining pressure-drag excess at 10° is a
-near-field resolution item (section 8), not the farfield distance.
+1 % (Prandtl–Glauert); the pressure-drag excess at 10° is the chordwise
+resolution (section 8: 472 points per side bring it to +3 %), not the
+farfield distance.
 
 ## 10. Current limits
 
@@ -382,10 +398,10 @@ near-field resolution item (section 8), not the farfield distance.
   bubbles.
 - Steady cases are verified; unsteady RANS (shedding at high Re) has not
   been exercised.
-- Pressure drag at high lift is 12–24 % above the data on the PyAero
-  meshes used so far (113 points per airfoil side, y⁺ 2.5 at the suction
-  peak); the farfield distance has been ruled out (section 8), the
-  chordwise resolution has not been tested yet.
+- Drag needs 400–500 points per airfoil side (section 8): with 113 the
+  pressure drag is 13 % high at 10°. That means ~300k cells with y⁺ = 1
+  and about 30 s per iteration on a laptop; the linear solver is the
+  bottleneck (P13).
 - Run time grows with the sparse LU factorization: ~7–10 s per iteration at
   100k cells on two cores; above ~150k cells `linear_solver.type =
   "gmres-ilu"` is the cheaper choice (P13 for a stronger preconditioner).
