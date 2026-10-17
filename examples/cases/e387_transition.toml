@@ -1,0 +1,87 @@
+# Eppler 387 at Re = 2e5 with the BCM transition model (L3, step 1
+# validation) on the PyAero mesh examples/meshes/e387_pyaero_y1.su2
+# (C-type, 209k quads, 481 points per side, first cell 2e-4 chords, tunnel
+# 5 chords top/bottom, outlet 25 chords). Reference: McGhee, Walker &
+# Millard, NASA TM 4062 (1988), Langley LTPT, Re 2e5, Tu ~ 0.1 %: lift,
+# drag (wake rake) and oil-flow transition/separation locations. At this
+# Reynolds number the upper surface has a laminar separation bubble around
+# mid-chord; the transition location in the summary (max nu_t/nu > 1) and
+# the wall CSV (cp, cf, nu_t_ratio_max) show where the model puts it.
+# Polar: aerojax polar examples/cases/e387_transition.toml --alpha -2 0 2 4 6 8
+# The freestream nu_tilde must be laminar (nu_tilde/nu = 0.1), see
+# docs/pyaero.md section 7.1.
+
+[case]
+name = "e387_transition"
+
+[mesh]
+file = "../meshes/e387_pyaero_y1.su2"   # boundary faces: airfoil, inlet, outlet, top, bottom
+
+[physics]
+model = "rans"
+turbulence = "sa-neg"
+
+[physics.transition]
+model = "bcm"
+turbulence_intensity = 0.001      # fraction: 0.1 % (LTPT)
+
+[fluid]
+density = 1.0                     # kg/m^3
+viscosity = 5.0e-6                # Pa s: Re = 2e5 with U = 1 m/s, c = 1 m
+
+[reference]
+velocity = 1.0                    # m/s
+length = 1.0                      # m, chord
+moment_center = [0.25, 0.0]       # m, quarter chord: also the vortex location
+vortex_correction = true
+
+[initial]
+from_boundary = "inlet"
+
+[boundary.airfoil]
+type = "wall"
+
+[boundary.inlet]
+type = "farfield"
+velocity = 1.0                    # m/s
+angle_of_attack = 4.0             # deg
+pressure = 0.0                    # Pa
+turbulence = { nu_tilde_ratio = 0.1 }   # laminar freestream for the BCM model
+
+[boundary.outlet]
+type = "farfield"
+velocity = 1.0
+angle_of_attack = 4.0
+pressure = 0.0
+turbulence = { nu_tilde_ratio = 0.1 }
+
+[boundary.top]
+type = "farfield"
+velocity = 1.0
+angle_of_attack = 4.0
+pressure = 0.0
+turbulence = { nu_tilde_ratio = 0.1 }
+
+[boundary.bottom]
+type = "farfield"
+velocity = 1.0
+angle_of_attack = 4.0
+pressure = 0.0
+turbulence = { nu_tilde_ratio = 0.1 }
+
+[numerics]
+limiter = "venkatakrishnan"       # local threshold for the start-up transient
+limiter_freeze = { after_residual_drop = 1.5, after_iterations = 40, release = true }
+
+[solver]
+residual_drop = 7.0
+max_iterations = 400
+newton_krylov = { switch_at_residual_drop = 1.5, switch_at_iteration = 40 }
+# Intel MKL PARDISO: 3.5x faster factorization than the default SuperLU
+# ("direct"), needs the pypardiso package (conda install -c conda-forge
+# pypardiso); remove the line or set type = "direct" without it.
+linear_solver = { type = "pardiso" }
+
+[output]
+directory = "output/e387_transition"
+force_boundaries = ["airfoil"]

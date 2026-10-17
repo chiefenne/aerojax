@@ -19,6 +19,9 @@
   example `examples/cases/flat_plate_transition.toml`. The discrete problem
   can have more than one steady state on a coarse laminar boundary layer
   (noted in the docs). Planned next: SA-AFT, SST, Langtry–Menter γ-Re_θ.
+- Eppler 387 validation case `examples/cases/e387_transition.toml` on the
+  PyAero mesh `examples/meshes/e387_pyaero_y1.su2` (209k cells, 481 points per
+  side, first cell 2e-4 c) against NASA TM 4062, Re 2·10⁵, Tu 0.1 %.
 
 ## 0.7.2 – Speed: lagged factorization, PARDISO/UMFPACK, Jacobian pattern (2026-10-17)
 
