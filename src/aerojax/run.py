@@ -201,6 +201,7 @@ def setup(config, mesh=None):
     if physics["mean_pressure_gradient"] is not None:
         g = physics["mean_pressure_gradient"]
         force = tuple(-gi * scaling.length / scaling.pressure for gi in g)
+    tr_cfg = physics["transition"]
     model = inc.IncompressibleModel(
         density=rho_nd,
         viscosity=mu_nd,
@@ -214,6 +215,8 @@ def setup(config, mesh=None):
         turbulence=physics["turbulence"] if rans else "none",
         turbulence_spatial_order=num["turbulence_spatial_order"],
         coupling=cfg["solver"]["turbulence_coupling"],
+        transition=physics["transition"]["model"] if rans else "none",
+        turbulence_intensity=100.0 * (tr_cfg["turbulence_intensity"] or 0.0),
     )
     regions = None
     if rans and physics["transition"]["mode"] == "prescribed":
@@ -464,6 +467,7 @@ def _run_steady(log, config, problem, scaling, w0, mesh, out_dir):
                 ("CD pressure, viscous", f"{c.cd_pressure:.6f}, {c.cd_viscous:.6f}"),
                 ("Cx, Cy", f"{c.cx:.6f}, {c.cy:.6f}"),
             ]
+            + _transition_rows(monitor, result.u)
         )
         for bname in force_boundaries:
             path = out_dir / f"{name}.wall_{bname}.csv"
@@ -471,6 +475,17 @@ def _run_steady(log, config, problem, scaling, w0, mesh, out_dir):
             rows.append((f"wall '{bname}'", str(path)))
     log.table(rows)
     return result, coefficients
+
+
+def _transition_rows(monitor, w):
+    """Summary rows with the transition locations (transition model only)."""
+    if monitor.problem.model.transition == "none":
+        return []
+    rows = []
+    for (boundary, side), x in monitor.transition_locations(w).items():
+        where = "none (laminar)" if x is None else f"x = {x:.4g} m"
+        rows.append((f"transition '{boundary}' {side}", where + " (nu_t/nu > 1)"))
+    return rows
 
 
 def _vortex_rows(vortex, scaling):
@@ -624,6 +639,35 @@ class Monitor:
         f = self.problem.forces(w, self.boundaries, self.moment_center)
         return fz.coefficients(f, self.q, 1.0, self.alpha)
 
+    def transition_locations(self, w):
+        """Transition location per side of each force boundary.
+
+        The chordwise position (SI) where the boundary layer's maximum
+        nu_t/nu first exceeds 1 on the upper (y >= 0) and the lower side,
+        or None if it never does (laminar to the trailing edge).
+        """
+        geom = self.problem.geom
+        out = {}
+        for boundary in self.boundaries:
+            faces = self.problem.boundary_faces([boundary])
+            centre = np.asarray(geom.b_centre)[faces]
+            g = self.problem.wall_eddy_viscosity_ratio(w, faces)
+            for side, sel in (
+                ("upper", centre[:, 1] >= 0.0),
+                ("lower", centre[:, 1] < 0.0),
+            ):
+                if not sel.any():
+                    continue
+                order = np.argsort(centre[sel, 0])
+                turbulent = np.flatnonzero(g[sel][order] >= 1.0)
+                x = centre[sel, 0][order]
+                out[(boundary, side)] = (
+                    float(x[turbulent[0]]) * self.scaling.length
+                    if turbulent.size
+                    else None
+                )
+        return out
+
     def write_wall(self, w, boundary, path):
         """Write x, y, p, Cp, tau_x, tau_y, Cf of one boundary (SI units)."""
         loads = self.problem.wall_loads(w)
@@ -648,6 +692,9 @@ class Monitor:
             columns["y_plus"] = (
                 dist * np.sqrt(tau_w / m.density) / (m.viscosity / m.density)
             )
+            # Maximum nu_t/nu over the boundary-layer column above each face:
+            # laminar ~1e-6-1e-2, turbulent 10-100.
+            columns["nu_t_ratio_max"] = self.problem.wall_eddy_viscosity_ratio(w, faces)
         header = ",".join(columns)
         rows = np.column_stack(list(columns.values()))
         np.savetxt(path, rows, delimiter=",", header=header, comments="", fmt="%.10e")
@@ -677,6 +724,8 @@ def _write_fields(path, mesh, w_nd, scaling, problem=None):
         data["eddy_viscosity_ratio"] = problem.eddy_viscosity(w_nd) / (
             problem.model.viscosity / problem.model.density
         )
+        if problem.model.transition != "none":
+            data["intermittency"] = problem.intermittency(w_nd)
     write_vtu(path, mesh, cell_data=data)
 
 
@@ -780,9 +829,26 @@ def _log_setup(log, config, problem, scaling, mesh):
                 np.count_nonzero(np.asarray(problem.geom.production_switch) == 0)
             )
             rows.append(("laminar regions", f"{n_off} cells without SA production"))
+        if problem.model.transition != "none":
+            tu = problem.model.turbulence_intensity
+            re_theta_t = 803.73 * (tu + 0.6067) ** (-1.027)
+            rows.append(
+                (
+                    "transition",
+                    f"{problem.model.transition} (SA-noft2), Tu = {tu:.3g} %, "
+                    f"Re_theta_t = {re_theta_t:.0f}",
+                )
+            )
         log.table(rows)
+        bcm = problem.model.transition == "bcm"
         for name, v in tv.items():
-            if not 0.99 * 3.0 <= v.chi <= 1.01 * 5.0:
+            if bcm and v.chi > 0.5:
+                config.notices.append(
+                    f"{name}: nu_tilde/nu = {v.chi:.3g} with the BCM transition model: "
+                    "its second term reads eddy viscosity as turbulence (nu_tilde/nu "
+                    "= 3 gives gamma = 0.96 in the freestream); use about 0.1"
+                )
+            elif not bcm and not 0.99 * 3.0 <= v.chi <= 1.01 * 5.0:
                 config.notices.append(
                     f"{name}: nu_tilde/nu = {v.chi:.3g} outside the NASA TMR range 3-5"
                 )

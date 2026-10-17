@@ -81,23 +81,48 @@ def solve(
     reynolds=5.0e6,
     coupling="segregated",
     settings=None,
+    transition="none",
+    turbulence_intensity=0.0,
+    nu_tilde_ratio=3.0,
 ):
-    """Run the turbulent flat plate and evaluate C_f(x) and the drag."""
+    """Run the turbulent flat plate and evaluate C_f(x) and the drag.
+
+    ``transition = "bcm"`` with ``turbulence_intensity`` (percent) runs the
+    transitional plate (T3-series style) instead of the fully turbulent one;
+    the BCM model needs a low freestream ``nu_tilde_ratio`` (0.1 instead of
+    the fully turbulent 3), its second term reads existing eddy viscosity as
+    turbulence.
+    """
     u_inf, nu = 1.0, 1.0 / reynolds
+    nt_inf = nu_tilde_ratio * nu
     mesh = plate_mesh(nx_plate, nx_front, ny, reynolds)
     conditions = {
-        "left": {"type": "velocity-inlet", "velocity": (u_inf, 0.0)},
+        "left": {
+            "type": "velocity-inlet",
+            "velocity": (u_inf, 0.0),
+            "nu_tilde": nt_inf,
+        },
         "right": {"type": "pressure-outlet", "pressure": 0.0},
-        "top": {"type": "farfield", "velocity": (u_inf, 0.0), "pressure": 0.0},
+        "top": {
+            "type": "farfield",
+            "velocity": (u_inf, 0.0),
+            "pressure": 0.0,
+            "nu_tilde": nt_inf,
+        },
         "symmetry": {"type": "symmetry"},
         "plate": {"type": "wall"},
     }
     model = inc.IncompressibleModel(
-        density=1.0, viscosity=nu, turbulence="sa-neg", coupling=coupling
+        density=1.0,
+        viscosity=nu,
+        turbulence="sa-neg",
+        coupling=coupling,
+        transition=transition,
+        turbulence_intensity=turbulence_intensity,
     )
     problem = IncompressibleProblem(mesh, model, conditions)
     result = problem.solve(
-        problem.initial_state((u_inf, 0.0)),
+        problem.initial_state((u_inf, 0.0), nu_tilde=nt_inf),
         settings or PseudoTimeSettings(residual_drop=8.0, max_iterations=400),
     )
     faces = problem.boundary_faces(["plate"])

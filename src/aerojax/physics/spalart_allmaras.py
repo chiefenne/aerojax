@@ -11,6 +11,12 @@ transport equation (kinematic form, incompressible)
 
 with nu_t written for nu_tilde. The eddy viscosity is nu_tilde f_v1 for
 nu_tilde >= 0 and 0 otherwise.
+
+Transition (L3, first step): the algebraic BCM model of Cakmakcioglu, Bas,
+Mura & Kaynak (2020 revision, as implemented in SU2) multiplies the
+production term by an intermittency gamma_BC built from the vorticity
+Reynolds number and the freestream turbulence intensity; it is used with
+the f_t2 term switched off (SA-noft2-BCM).
 """
 
 import jax.numpy as jnp
@@ -29,6 +35,9 @@ CN1 = 16.0
 CW1 = CB1 / KAPPA**2 + (1.0 + CB2) / SIGMA
 C2, C3 = 0.7, 0.9
 R_MAX = 10.0
+# BCM transition model (2020 revision)
+BCM_CHI1 = 0.002
+BCM_CHI2 = 50.0
 
 
 def fv1(chi):
@@ -52,7 +61,45 @@ def diffusion_coefficient(nu_tilde, nu):
     return (nu + nu_tilde * jnp.where(nu_tilde >= 0.0, 1.0, fn)) / SIGMA
 
 
-def source(nu_tilde, nu, vorticity, distance, grad_sq, production_switch=1.0):
+def bcm_intermittency(nu_tilde, nu, vorticity, distance, turbulence_intensity):
+    """Intermittency gamma_BC of the BCM transition model (2020 revision).
+
+    gamma = 1 - exp(-sqrt(T1) - sqrt(T2)) with
+    T1 = max(Re_theta - Re_theta_t, 0) / (chi_1 Re_theta_t),
+    Re_theta = Re_v / 2.193, Re_v = d^2 |omega| / nu (vorticity Reynolds
+    number), Re_theta_t = 803.73 (Tu + 0.6067)^-1.027 (Menter's correlation,
+    Tu in percent), and T2 = chi_2 nu_t / nu with nu_t = nu_tilde f_v1.
+    T1 switches production on once the laminar boundary layer is thick
+    enough for its Tu; T2 keeps it on where eddy viscosity already exists.
+    """
+    re_v = distance**2 * vorticity / nu
+    re_theta = re_v / 2.193
+    re_theta_t = 803.73 * (turbulence_intensity + 0.6067) ** (-1.027)
+    term1 = _safe_sqrt((re_theta - re_theta_t) / (BCM_CHI1 * re_theta_t))
+    term2 = _safe_sqrt(BCM_CHI2 * nu_tilde * fv1(nu_tilde / nu) / nu)
+    return 1.0 - jnp.exp(-(term1 + term2))
+
+
+def _safe_sqrt(x):
+    """sqrt(max(x, 0)) with a zero derivative for x <= 0.
+
+    ``jnp.sqrt(jnp.maximum(x, 0))`` has the tangent 0 / 0 = NaN there, which
+    would poison the Jacobian-vector products of every laminar cell.
+    """
+    positive = x > 0.0
+    return jnp.where(positive, jnp.sqrt(jnp.where(positive, x, 1.0)), 0.0)
+
+
+def source(
+    nu_tilde,
+    nu,
+    vorticity,
+    distance,
+    grad_sq,
+    production_switch=1.0,
+    intermittency=1.0,
+    ft2=True,
+):
     """Source per unit volume: production - destruction + c_b2 term.
 
     Parameters
@@ -68,7 +115,14 @@ def source(nu_tilde, nu, vorticity, distance, grad_sq, production_switch=1.0):
     production_switch : array or float
         1 where the model is active, 0 in prescribed laminar regions (D15):
         the production term is switched off there.
+    intermittency : array or float
+        Transition-model factor on the production term (BCM); 1 = fully
+        turbulent.
+    ft2 : bool
+        Include the f_t2 term (standard SA-neg); False gives SA-noft2, the
+        form the BCM model is paired with.
     """
+    ct3 = CT3 if ft2 else 0.0
     chi = nu_tilde / nu
     s = vorticity
     kd2 = (KAPPA * distance) ** 2
@@ -87,12 +141,14 @@ def source(nu_tilde, nu, vorticity, distance, grad_sq, production_switch=1.0):
     r = jnp.minimum(nu_tilde / jnp.maximum(s_mod * kd2, floor), R_MAX)
     g = r + CW2 * (r**6 - r)
     f_w = g * ((1.0 + CW3**6) / (g**6 + CW3**6)) ** (1.0 / 6.0)
-    f_t2 = CT3 * jnp.exp(-CT4 * chi**2)
-    production = production_switch * CB1 * (1.0 - f_t2) * s_mod * nu_tilde
+    f_t2 = ct3 * jnp.exp(-CT4 * chi**2)
+    production = (
+        production_switch * intermittency * CB1 * (1.0 - f_t2) * s_mod * nu_tilde
+    )
     destruction = (CW1 * f_w - CB1 / KAPPA**2 * f_t2) * (nu_tilde / distance) ** 2
     positive = production - destruction
     # nu_tilde < 0: modified terms (destruction becomes a sink of negative values).
-    negative = CB1 * (1.0 - CT3) * s * nu_tilde + CW1 * (nu_tilde / distance) ** 2
+    negative = CB1 * (1.0 - ct3) * s * nu_tilde + CW1 * (nu_tilde / distance) ** 2
     return jnp.where(nu_tilde >= 0.0, positive, negative) + CB2 / SIGMA * grad_sq
 
 

@@ -328,6 +328,33 @@ class IncompressibleProblem:
             self.model, self.geom, self.bc, jnp.asarray(w), self.physics.boundary_state
         )
 
+    def intermittency(self, w):
+        """Transition intermittency per cell (ones without a transition model)."""
+        if not self.turbulent or self.model.transition == "none":
+            return np.ones(self.mesh.n_cells)
+        return np.asarray(
+            rans.intermittency_field(self.model, self.geom, self.bc, jnp.asarray(w))
+        )
+
+    def wall_eddy_viscosity_ratio(self, w, faces):
+        """Maximum nu_t/nu over the boundary-layer column above each wall face.
+
+        The column is the set of cells whose nearest wall face it is, within
+        0.05 reference lengths of the wall (several boundary-layer
+        thicknesses at any Reynolds number of interest, but not the
+        freestream). A laminar boundary layer has values of 1e-6-1e-2, a
+        turbulent one 10-100; the transition location reported in the
+        summary is where it first exceeds 1. ``faces`` are boundary-face
+        indices (``b_*`` order).
+        """
+        ratio = self.eddy_viscosity(w) / (self.model.viscosity / self.model.density)
+        face_ids = self.disc.boundary_face_ids[np.asarray(faces)]
+        nearest = self.nearest_wall_face
+        column = np.full(self.mesh.n_faces, -np.inf)
+        valid = (nearest >= 0) & (np.asarray(self.geom.wall_distance) <= 0.05)
+        np.maximum.at(column, nearest[valid], ratio[valid])
+        return np.where(np.isfinite(column[face_ids]), column[face_ids], 0.0)
+
     def eddy_viscosity(self, w):
         """Kinematic eddy viscosity per cell (zeros without a turbulence model)."""
         if not self.turbulent:

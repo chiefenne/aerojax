@@ -400,6 +400,26 @@ def _consistency(data, explicit, problems, notices, path):
                 problems.append(f"{dotted}.side: must be 'upper' or 'lower'")
     elif tr["laminar_region"]:
         notices.append("physics.transition.laminar_region ignored: mode = none")
+    if tr["model"] != "none":
+        if not rans:
+            problems.append("physics.transition.model needs physics.model = rans")
+        if tr["turbulence_intensity"] is None:
+            tu = [
+                b["turbulence"]["intensity"]
+                for b in boundaries.values()
+                if isinstance(b.get("turbulence"), dict)
+                and b["turbulence"].get("intensity") is not None
+            ]
+            if tu:
+                tr["turbulence_intensity"] = float(tu[0])
+            else:
+                problems.append(
+                    "physics.transition.turbulence_intensity is required for "
+                    f"model = {tr['model']} (fraction, e.g. 0.001 = 0.1 %) unless an "
+                    "inflow turbulence table gives intensity"
+                )
+    elif tr["turbulence_intensity"] is not None:
+        notices.append("physics.transition.turbulence_intensity ignored: model = none")
     if rans:
         _turbulence_table(data["initial"], "initial", problems)
         for name, b in boundaries.items():

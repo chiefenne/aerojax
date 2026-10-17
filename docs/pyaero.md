@@ -270,10 +270,64 @@ merged into the file and start from the nearest angle already computed.
 
 ## 7. Transition
 
-The SA model is fully turbulent. Until a transition model exists (L3),
-transition is prescribed: SA production is switched off in laminar regions
-given per surface side and chordwise bound, with the location from XFOIL's
-e^N method or from experiment (`examples/cases/naca0012_pyaero_transition.toml`):
+The SA model is fully turbulent. Two ways out: the BCM transition model
+(7.1), or prescribed laminar regions with the location from XFOIL's e^N
+method or from experiment (7.2). Both can be combined.
+
+### 7.1 Transition model (BCM)
+
+```toml
+[physics.transition]
+model = "bcm"
+turbulence_intensity = 0.001      # Tu as a fraction: 0.1 % (free flight ~0.05-0.1 %)
+
+[boundary.inlet]                  # and every other farfield/inflow table
+turbulence = { nu_tilde_ratio = 0.1 }   # laminar freestream, see below
+```
+
+The BCM model (Cakmakcioglu, Bas, Mura & Kaynak, 2020 revision, the form
+SU2 implements) multiplies the SA production by an intermittency
+γ = 1 − exp(−√T₁ − √T₂): T₁ compares the local vorticity Reynolds number
+d²Ω/ν — a proxy for the momentum-thickness Reynolds number of the boundary
+layer — with Menter's critical value Re_θ,t = 803.73 (Tu + 0.6067)^−1.027
+(Tu in percent), T₂ = 50 ν_t/ν keeps production on where eddy viscosity
+already exists. No extra transport equation, no convergence cost beyond
+SA; the f_t2 term of SA is switched off with it (SA-noft2-BCM). What it
+gives: laminar flow until the boundary layer reaches the critical
+thickness for the given Tu, then a short transition; separation-induced
+transition follows from the vorticity criterion firing quickly in a
+separated shear layer. What it does not give: the N-factor sensitivity of
+natural transition at low Tu that XFOIL has — the correlation saturates
+(Re_θ,t = 1300 as Tu → 0).
+
+Two inputs matter. The turbulence intensity (free flight 0.05–0.1 %, wind
+tunnels 0.1–1 %) sets the critical Reynolds number. The freestream ν̃ must
+be laminar: the fully turbulent TMR value ν̃/ν = 3 gives ν_t/ν = 0.21 and
+therefore γ = 0.96 everywhere through T₂, i.e. turbulent flow from the
+leading edge at any Tu; ν̃/ν = 0.1 (ν_t/ν = 3·10⁻⁷) is right, and the log
+prints a notice above 0.5. The transition locations per side are in the
+summary (where the boundary layer's maximum ν_t/ν first exceeds 1), the
+wall CSV has `nu_t_ratio_max` (laminar 10⁻⁶–10⁻², turbulent 10–100) and
+the VTU the `intermittency` field.
+
+Verification on the flat plate (`docs/validation.md`, section 7): at Tu
+0.1 % the plate stays laminar (Blasius C_f within 5 %), at Tu 3.3 % (the
+ERCOFTAC T3A level) it is laminar at Re_x = 0.75·10⁵, transitions at
+1.2·10⁵, where the experiment transitions, and reaches the turbulent C_f
+by 2.5·10⁵. Because γ feeds back on itself through T₂, the discrete
+problem can have more than one steady state when the laminar boundary
+layer is under-resolved (seen on the 48-cell plate, not on the 96-cell
+one): resolve the laminar part — y⁺ ≈ 1 does — and, when a transition
+location matters, confirm it with a second start-up (e.g. a different
+`cfl.start`). Airfoil validation at model-aircraft Reynolds numbers
+(Eppler 387, NASA TM 4062) is the next step; until then treat BCM results
+as the right trend, not as XFOIL-grade polars.
+
+### 7.2 Prescribed transition
+
+SA production is switched off in laminar regions given per surface side
+and chordwise bound, with the location from XFOIL's e^N method or from
+experiment (`examples/cases/naca0012_pyaero_transition.toml`):
 
 ```toml
 [physics.transition]
@@ -325,8 +379,7 @@ CD = 0.0053 (pressure 0.0010, viscous 0.0043) against 0.0083 fully
 turbulent, Abbott & von Doenhoff's smooth-airfoil value of 0.0058 and
 Ladson's tripped 0.0081 — the drag is as sensitive to the transition
 location as expected, so the location must come from a boundary-layer
-method, not from a guess. This is the state of the art for model-aircraft
-and glider Reynolds numbers until L3.
+method, not from a guess.
 
 ## 8. Validation on the stage-6 mesh (fully turbulent, Re 6·10⁶)
 
@@ -418,10 +471,9 @@ farfield distance.
 
 ## 10. Current limits
 
-- Fully turbulent SA or prescribed transition only; no transition model
-  yet (planned, L3). At model-aircraft Reynolds numbers (10⁵–5·10⁵) a fully
-  turbulent solution overpredicts the drag and misses laminar separation
-  bubbles.
+- Transition: the algebraic BCM model (section 7.1) is verified on the
+  flat plate, not yet validated on an airfoil at model-aircraft Reynolds
+  numbers; the e^N-based SA-AFT model is the planned second step (L3).
 - Steady cases are verified; unsteady RANS (shedding at high Re) has not
   been exercised.
 - Drag needs 400–500 points per airfoil side (section 8): with 113 the

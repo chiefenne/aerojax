@@ -63,6 +63,22 @@ SCHEMA = {
                 "none = fully turbulent; prescribed = laminar regions",
                 choices=("none", "prescribed"),
             ),
+            "model": Opt(
+                "string",
+                "none",
+                "Transition model: bcm = algebraic intermittency on the SA production "
+                "(Cakmakcioglu et al., 2020 revision, with SA-noft2); combines with "
+                "mode = prescribed",
+                choices=("none", "bcm"),
+            ),
+            "turbulence_intensity": Opt(
+                "float",
+                None,
+                "Freestream turbulence intensity Tu for the transition model, as a "
+                "fraction (0.001 = 0.1 %); default: the intensity of the inflow "
+                "turbulence table",
+                minimum=0.0,
+            ),
             "laminar_region": Opt(
                 "table_list",
                 None,

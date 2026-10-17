@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased (0.8) – Transition, step 1: SA-BCM
+
+- BCM transition model (Cakmakcioglu et al., 2020 revision, SU2 form):
+  `physics.transition.model = "bcm"` with `turbulence_intensity` (fraction,
+  defaults to the inflow table's `intensity`). Algebraic intermittency
+  γ = 1 − exp(−√T₁ − √T₂) from the vorticity Reynolds number and ν_t/ν
+  multiplies the SA production; f_t2 is switched off (SA-noft2-BCM). Needs a
+  laminar freestream (ν̃/ν ≈ 0.1; the log warns above 0.5).
+- Transition reporting for every RANS run: transition location per side in
+  the summary (first x where the boundary layer's max ν_t/ν exceeds 1), wall
+  CSV column `nu_t_ratio_max`, VTU field `intermittency`.
+- The SA source Jacobian in the first-order system keeps only its negative
+  (damping) part; the positive production derivative made the 96 × 64 BCM
+  plate diverge in ν̃ at CFL 10³.
+- Verified on the TMR plate at Re_L = 5·10⁵: laminar at Tu 0.1 %, transition
+  at Re_x = 1.2·10⁵ at Tu 3.3 % (T3A); `docs/validation.md` section 7,
+  example `examples/cases/flat_plate_transition.toml`. The discrete problem
+  can have more than one steady state on a coarse laminar boundary layer
+  (noted in the docs). Planned next: SA-AFT, SST, Langtry–Menter γ-Re_θ.
+
 ## 0.7.2 – Speed: lagged factorization, PARDISO/UMFPACK, Jacobian pattern (2026-10-17)
 
 - Fixed: after the limiter was released (or frozen) the acceptance test still

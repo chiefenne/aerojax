@@ -87,6 +87,43 @@ def vorticity(grad):
     return jnp.abs(grad[:, V, 0] - grad[:, U, 1])
 
 
+def _source(model, nu_tilde, vort, distance, grad_sq, switch):
+    """SA source with the transition model's intermittency (cell-local)."""
+    nu = kinematic_viscosity(model)
+    gamma = intermittency(model, nu_tilde, vort, distance)
+    return sa.source(
+        nu_tilde,
+        nu,
+        vort,
+        distance,
+        grad_sq,
+        switch,
+        intermittency=gamma,
+        ft2=model.transition == "none",
+    )
+
+
+def intermittency(model, nu_tilde, vort, distance):
+    """Transition intermittency on the SA production: 1 without a model."""
+    if model.transition == "bcm":
+        return sa.bcm_intermittency(
+            nu_tilde,
+            kinematic_viscosity(model),
+            vort,
+            distance,
+            model.turbulence_intensity,
+        )
+    return 1.0
+
+
+def intermittency_field(model, geom, bc, w):
+    """Intermittency per cell for the output (ones without a transition model)."""
+    w_b = boundary_state(bc, geom.b_normal, w[geom.b_owner])
+    vort = vorticity(lsq_gradient(geom, w, w_b))
+    gamma = intermittency(model, w[:, NT], vort, geom.wall_distance)
+    return jnp.broadcast_to(jnp.asarray(gamma, dtype=float), w[:, NT].shape)
+
+
 def eddy_viscosity(model, w):
     """Kinematic eddy viscosity per cell."""
     return sa.eddy_viscosity(w[:, NT], kinematic_viscosity(model))
@@ -147,14 +184,8 @@ def residual(model, geom, bc, w, order, beta2, psi=None):
         jnp.concatenate((b_flux, sa_b[:, None]), axis=1),
     )
     grad_sq = jnp.sum(grad[:, NT, :] ** 2, axis=1)
-    src = sa.source(
-        w[:, NT],
-        kinematic_viscosity(model),
-        vorticity(grad),
-        geom.wall_distance,
-        grad_sq,
-        1.0 if geom.production_switch is None else geom.production_switch,
-    )
+    switch = 1.0 if geom.production_switch is None else geom.production_switch
+    src = _source(model, w[:, NT], vorticity(grad), geom.wall_distance, grad_sq, switch)
     r = r.at[:, NT].add(-geom.area * src)
     force = jnp.asarray(model.body_force)
     r = r.at[:, 1:3].add(-geom.area[:, None] * force[None, :])
@@ -215,18 +246,23 @@ def source_blocks(model, geom, bc, w):
     w_b = boundary_state(bc, geom.b_normal, w[geom.b_owner])
     grad = lsq_gradient(geom, w, w_b)
     grad_sq = jnp.sum(grad[:, NT, :] ** 2, axis=1)
-    nu = kinematic_viscosity(model)
     switch = 1.0 if geom.production_switch is None else geom.production_switch
-    d_src = jax.vmap(jax.grad(sa.source, argnums=0), in_axes=(0, None, 0, 0, 0, 0))(
+    d_src = jax.vmap(jax.grad(_source, argnums=1), in_axes=(None, 0, 0, 0, 0, 0))(
+        model,
         w[:, NT],
-        nu,
         vorticity(grad),
         geom.wall_distance,
         grad_sq,
         jnp.broadcast_to(jnp.asarray(switch, dtype=float), w[:, NT].shape),
     )
+    # Only the negative part (destruction-like) enters the implicit
+    # operator: a positive dP/d nu_tilde larger than the pseudo-time
+    # diagonal makes the implicit step unstable at large CFL (seen with the
+    # BCM model, whose laminar state is only weakly damped). The residual
+    # and the Newton-Krylov JVP are exact; this is the first-order
+    # Jacobian used for pseudo-time steps and as preconditioner.
     blocks = jnp.zeros((w.shape[0], 4, 4))
-    return blocks.at[:, NT, NT].set(-geom.area * d_src)
+    return blocks.at[:, NT, NT].set(-geom.area * jnp.minimum(d_src, 0.0))
 
 
 @partial(jax.jit, static_argnums=0)

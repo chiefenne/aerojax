@@ -111,6 +111,8 @@ class IncompressibleModel(NamedTuple):
     turbulence: str = "none"
     turbulence_spatial_order: int = 1
     coupling: str = "segregated"
+    transition: str = "none"  # "none" or "bcm" (algebraic, L3 step 1)
+    turbulence_intensity: float = 0.0  # freestream Tu in percent (BCM input)
 
     @property
     def n_var(self):

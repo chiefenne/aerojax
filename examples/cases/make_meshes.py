@@ -37,6 +37,7 @@ def main():
             128, 48, radius=0.5, outer_radius=10.0, growth=1.0 + 6.0 / 48
         ),
         "plate_rans_96x64.su2": plate_mesh(96, 24, 64, reynolds=5.0e6),
+        "plate_transition_96x64.su2": plate_mesh(96, 24, 64, reynolds=5.0e5),
         "naca0012_ogrid_256x128.su2": naca0012_ogrid(256, 128, reynolds=6.0e6),
     }
     for name, mesh in meshes.items():

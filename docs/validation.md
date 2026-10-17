@@ -31,7 +31,7 @@ exact solution u = exp(a · (x − (1, 1)) / ν) as Dirichlet data, on perturbed
 meshes of all four cell types, four refinement levels each. The RMS error
 falls with second order on every type; the last refinement step gives
 orders 2.08 (quadrilaterals), 1.94 (triangles), 1.91 (polygons), 2.11
-(mixed). The residual drops ten orders in 20–28 pseudo-time iterations.
+(mixed). The residual drops eleven orders in 21–28 pseudo-time iterations.
 
 ![convection–diffusion](figures/stage1_convection_diffusion.png)
 
@@ -145,6 +145,29 @@ The self-contained O-grid case (`examples/stage6_naca0012.py`, generated
 mesh, 500-chord farfield, frozen limiter) reproduces the same lift (1.076
 at 10° on 256 × 128) and serves the test suite; its drag at 0° is 13 %
 high for the same reason as the 113-point PyAero mesh.
+
+## 7. BCM transition on the flat plate
+
+The SA-noft2-BCM model (`physics.transition.model = "bcm"`, section 7.1 of
+`docs/pyaero.md`) on the TMR plate domain at Re_L = 5·10⁵, laminar
+freestream ν̃/ν = 0.1 (`tests/verification/test_rans_plate.py`,
+`examples/cases/flat_plate_transition.toml`):
+
+| Tu | mesh | result |
+|---|---|---|
+| 0.1 % | 48 × 48 | laminar over the whole plate: C_f within 5 % of Blasius for 2.5·10⁵ ≤ Re_x ≤ 9.5·10⁵ |
+| 3.3 % (ERCOFTAC T3A) | 96 × 64 | laminar at Re_x = 0.75·10⁵ (C_f −4 % vs Blasius), transition at Re_x = 1.2·10⁵ (boundary-layer ν_t/ν first above 1 at x = 0.236), turbulent from Re_x = 2.5·10⁵ on: C_f = 0.00433 / 0.00355 at Re_x = 2.5·10⁵ / 9.5·10⁵ against 0.00480 / 0.00367 from the 0.0576 Re_x^−0.2 correlation |
+
+In the T3A experiment C_f leaves the laminar curve at Re_x ≈ 1.3·10⁵ and
+reaches the turbulent one near 3·10⁵, which the model reproduces with the
+2020 correlation constants. One property to know: the intermittency feeds
+back on itself through ν_t (the T₂ term), so the discrete problem can have
+more than one steady state. On the 48-cell plate at Tu 3.3 % the converged
+transition location depends on the start-up path (Re_x = 0.75·10⁵ or
+1.2·10⁵ depending on the Jacobian used in the pseudo-time phase); on the
+96-cell plate it does not. Resolve the laminar part of the boundary layer
+(as PyAero's y⁺ ≈ 1 meshes do) and compare two start-ups when a transition
+location matters.
 
 ## References
 

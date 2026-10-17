@@ -233,3 +233,62 @@ def test_run_case_rans(tmp_path):
     assert "eddy_viscosity_ratio" in (tmp_path / "out" / "plate.vtu").read_text(
         errors="ignore"
     )
+
+
+def test_run_case_bcm_transition(tmp_path):
+    """The BCM model through the case file: Tu from the inflow table, log
+    rows, intermittency in the VTU and the wall CSV, transition location in
+    the summary."""
+    from aerojax.cases.tmr_flat_plate import plate_mesh
+    from aerojax.mesh import write_su2
+
+    toml = (
+        PLATE_TOML.replace(
+            '[physics.transition]\nmode = "prescribed"\n'
+            'laminar_region = [{ boundary = "plate", side = "upper", x_max = 0.05 }]\n',
+            '[physics.transition]\nmodel = "bcm"\n',
+        )
+        .replace(
+            "turbulence = { kinetic_energy = 0.0015, length_scale = 0.01 }",
+            # nu_t/nu = 2.8e-7 is nu_tilde/nu = 0.1, the laminar freestream BCM needs
+            "turbulence = { turbulent_viscosity_ratio = 2.8e-7, intensity = 0.033 }",
+        )
+        .replace("reynolds_number = 1.0e5", "reynolds_number = 5.0e5")
+        .replace("[solver]\n", '[numerics]\nlimiter = "none"\n[solver]\n')
+        .replace(
+            '[boundary.top]\ntype = "farfield"\nvelocity = 10.0\n',
+            '[boundary.top]\ntype = "farfield"\nvelocity = 10.0\n'
+            "turbulence = { turbulent_viscosity_ratio = 2.8e-7, intensity = 0.033 }\n",
+        )
+    )
+    assert toml.count("intensity = 0.033") == 2
+    write_su2(tmp_path / "plate.su2", plate_mesh(48, 12, 48, reynolds=5.0e5))
+    (tmp_path / "plate.toml").write_text(toml)
+    result = run_case(tmp_path / "plate.toml", console=False)
+    assert result.converged
+    log = (tmp_path / "out" / "plate.log").read_text()
+    assert "bcm (SA-noft2), Tu = 3.3 %" in log and "Re_theta_t = 198" in log
+    assert "transition 'plate' upper" in log and "x = 0." in log
+    assert "with the BCM transition model" not in log  # nu_tilde/nu = 0.1 is fine
+    wall = np.genfromtxt(
+        tmp_path / "out" / "plate.wall_plate.csv", delimiter=",", names=True
+    )
+    g = wall["nu_t_ratio_max"]
+    assert g[wall["x"] < 0.2].max() < 0.01 and g[wall["x"] > 0.6].min() > 1.0
+    assert "intermittency" in (tmp_path / "out" / "plate.vtu").read_text(
+        errors="ignore"
+    )
+
+
+def test_bcm_config_rules():
+    raw = {**RANS_MINIMAL, "physics": {"model": "rans", "transition": {"model": "bcm"}}}
+    with pytest.raises(Exception, match="turbulence_intensity is required"):
+        resolve(raw)
+    raw["physics"]["transition"]["turbulence_intensity"] = 0.001
+    assert resolve(raw)["physics"]["transition"]["turbulence_intensity"] == 0.001
+    raw = {
+        **RANS_MINIMAL,
+        "physics": {"model": "laminar", "transition": {"model": "bcm"}},
+    }
+    with pytest.raises(Exception, match="needs physics.model = rans"):
+        resolve(raw)
